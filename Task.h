@@ -53,6 +53,8 @@ extern bool eventEnabledList[EVENT_SLOT_COUNT];
 extern int eventYearList[EVENT_SLOT_COUNT];
 extern int eventMonthList[EVENT_SLOT_COUNT];
 extern int eventDayList[EVENT_SLOT_COUNT];
+extern int eventHourList[EVENT_SLOT_COUNT];
+extern int eventMinuteList[EVENT_SLOT_COUNT];
 extern String eventTextList[EVENT_SLOT_COUNT];
 extern int activeEventIndex;
 extern bool eventRinging;

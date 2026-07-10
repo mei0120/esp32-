@@ -60,6 +60,8 @@ bool eventEnabledList[EVENT_SLOT_COUNT] = {false, false, false};
 int eventYearList[EVENT_SLOT_COUNT] = {0, 0, 0};
 int eventMonthList[EVENT_SLOT_COUNT] = {0, 0, 0};
 int eventDayList[EVENT_SLOT_COUNT] = {0, 0, 0};
+int eventHourList[EVENT_SLOT_COUNT] = {8, 8, 8};
+int eventMinuteList[EVENT_SLOT_COUNT] = {0, 0, 0};
 String eventTextList[EVENT_SLOT_COUNT] = {"", "", ""};
 int activeEventIndex = -1;
 bool eventRinging = false;
@@ -675,8 +677,8 @@ String eventReminderText(){
   eventTime.tm_year = eventYearList[index] - 1900;
   eventTime.tm_mon = eventMonthList[index] - 1;
   eventTime.tm_mday = eventDayList[index];
-  eventTime.tm_hour = 0;
-  eventTime.tm_min = 0;
+  eventTime.tm_hour = eventHourList[index];
+  eventTime.tm_min = eventMinuteList[index];
   eventTime.tm_sec = 0;
   time_t eventEpoch = mktime(&eventTime);
   if(eventEpoch <= 0){
@@ -684,16 +686,22 @@ String eventReminderText(){
   }
 
   tm nowInfo = currentTimeInfo();
-  nowInfo.tm_hour = 0;
-  nowInfo.tm_min = 0;
-  nowInfo.tm_sec = 0;
-  time_t todayEpoch = mktime(&nowInfo);
-  long daysLeft = (eventEpoch - todayEpoch) / 86400;
+  tm todayInfo = nowInfo;
+  todayInfo.tm_hour = 0;
+  todayInfo.tm_min = 0;
+  todayInfo.tm_sec = 0;
+  tm eventDayInfo = eventTime;
+  eventDayInfo.tm_hour = 0;
+  eventDayInfo.tm_min = 0;
+  eventDayInfo.tm_sec = 0;
+  time_t todayEpoch = mktime(&todayInfo);
+  time_t eventDayEpoch = mktime(&eventDayInfo);
+  long daysLeft = (eventDayEpoch - todayEpoch) / 86400;
   if(daysLeft == 1){
     return "Tomorrow: " + eventTextList[index];
   }
   if(daysLeft == 0){
-    return "Today: " + eventTextList[index];
+    return "Today " + twoDigits(eventHourList[index]) + ":" + twoDigits(eventMinuteList[index]) + " " + eventTextList[index];
   }
   return "";
 }
@@ -708,13 +716,9 @@ int nextEventIndex(){
     return -1;
   }
 
-  tm nowInfo = currentTimeInfo();
-  nowInfo.tm_hour = 0;
-  nowInfo.tm_min = 0;
-  nowInfo.tm_sec = 0;
-  time_t todayEpoch = mktime(&nowInfo);
   int bestIndex = -1;
-  long bestDays = 2147483647L;
+  long bestDelta = 2147483647L;
+  time_t nowEpoch = (time_t)currentEpoch();
   for(int i = 0; i < EVENT_SLOT_COUNT; i++){
     if(!eventEnabledList[i] || eventTextList[i].length() == 0){
       continue;
@@ -723,16 +727,16 @@ int nextEventIndex(){
     eventTime.tm_year = eventYearList[i] - 1900;
     eventTime.tm_mon = eventMonthList[i] - 1;
     eventTime.tm_mday = eventDayList[i];
-    eventTime.tm_hour = 0;
-    eventTime.tm_min = 0;
+    eventTime.tm_hour = eventHourList[i];
+    eventTime.tm_min = eventMinuteList[i];
     eventTime.tm_sec = 0;
     time_t eventEpoch = mktime(&eventTime);
     if(eventEpoch <= 0){
       continue;
     }
-    long daysLeft = (eventEpoch - todayEpoch) / 86400;
-    if(daysLeft >= 0 && daysLeft < bestDays){
-      bestDays = daysLeft;
+    long delta = eventEpoch - nowEpoch;
+    if(delta >= 0 && delta < bestDelta){
+      bestDelta = delta;
       bestIndex = i;
     }
   }
@@ -743,7 +747,9 @@ String eventDateText(int index){
   if(index < 0 || index >= EVENT_SLOT_COUNT || eventYearList[index] <= 0){
     return "--";
   }
-  return String(eventYearList[index]) + "/" + twoDigits(eventMonthList[index]) + "/" + twoDigits(eventDayList[index]);
+  return String(eventYearList[index]) + "/" + twoDigits(eventMonthList[index]) + "/" +
+         twoDigits(eventDayList[index]) + " " + twoDigits(eventHourList[index]) + ":" +
+         twoDigits(eventMinuteList[index]);
 }
 
 String eventScreenText(int index){
@@ -777,12 +783,6 @@ void checkEventReminder(){
   tm info = currentTimeInfo();
   int todayKey = info.tm_year * 400 + info.tm_yday;
 
-  tm today = info;
-  today.tm_hour = 0;
-  today.tm_min = 0;
-  today.tm_sec = 0;
-  time_t todayEpoch = mktime(&today);
-
   for(int i = 0; i < EVENT_SLOT_COUNT; i++){
     if(!eventEnabledList[i] || eventTextList[i].length() == 0){
       continue;
@@ -791,16 +791,15 @@ void checkEventReminder(){
     eventTime.tm_year = eventYearList[i] - 1900;
     eventTime.tm_mon = eventMonthList[i] - 1;
     eventTime.tm_mday = eventDayList[i];
-    eventTime.tm_hour = 0;
-    eventTime.tm_min = 0;
+    eventTime.tm_hour = eventHourList[i];
+    eventTime.tm_min = eventMinuteList[i];
     eventTime.tm_sec = 0;
     time_t eventEpoch = mktime(&eventTime);
     if(eventEpoch <= 0){
       continue;
     }
-    long daysLeft = (eventEpoch - todayEpoch) / 86400;
-    int eventKey = todayKey * EVENT_SLOT_COUNT + i;
-    if(daysLeft == 0 && lastEventDay != eventKey){
+    int eventKey = (todayKey * EVENT_SLOT_COUNT + i) * 1440 + eventHourList[i] * 60 + eventMinuteList[i];
+    if(info.tm_hour == eventHourList[i] && info.tm_min == eventMinuteList[i] && lastEventDay != eventKey){
       activeEventIndex = i;
       eventRinging = true;
       eventPagePending = true;

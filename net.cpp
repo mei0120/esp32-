@@ -230,6 +230,14 @@ static String eventInputDate(int index){
          (eventDayList[index] < 10 ? "0" : "") + String(eventDayList[index]);
 }
 
+static String eventInputTime(int index){
+  if(index < 0 || index >= EVENT_SLOT_COUNT){
+    return "08:00";
+  }
+  return (eventHourList[index] < 10 ? "0" : "") + String(eventHourList[index]) + ":" +
+         (eventMinuteList[index] < 10 ? "0" : "") + String(eventMinuteList[index]);
+}
+
 static bool isEventToday(int index){
   if(index < 0 || index >= EVENT_SLOT_COUNT || !clockReady()){
     return false;
@@ -238,6 +246,16 @@ static bool isEventToday(int index){
   return eventYearList[index] == info.tm_year + 1900 &&
          eventMonthList[index] == info.tm_mon + 1 &&
          eventDayList[index] == info.tm_mday;
+}
+
+static bool isEventNowOrPastToday(int index){
+  if(!isEventToday(index)){
+    return false;
+  }
+  tm info = currentTimeInfo();
+  int nowMinute = info.tm_hour * 60 + info.tm_min;
+  int eventMinute = eventHourList[index] * 60 + eventMinuteList[index];
+  return nowMinute >= eventMinute;
 }
 
 void handleControl(){
@@ -279,6 +297,7 @@ void handleControl(){
     eventsHtml += "<h3>Event " + String(i + 1) + "</h3>";
     eventsHtml += "<label class='check'><input type='checkbox' name='eventEnabled'" + checkedAttr(eventEnabledList[i]) + ">Enable this event</label>";
     eventsHtml += "<label>Event date</label><input type='date' name='eventDate' value='" + eventInputDate(i) + "'>";
+    eventsHtml += "<label>Event time</label><input type='time' name='eventTime' value='" + eventInputTime(i) + "'>";
     eventsHtml += "<label>Event text</label><textarea name='eventText' maxlength='60'>" + htmlEscape(eventTextList[i]) + "</textarea>";
     eventsHtml += "<button>Save Event " + String(i + 1) + "</button></form>";
   }
@@ -300,7 +319,7 @@ void handleControl(){
   }
   page += "<div class='card accent stat'><div class='wxTop'><div><h2>Weather</h2><div class='value'>" + htmlEscape(city) + "</div><div>Now " + htmlEscape(weather.text) + " · " + String(weather.temp) + " C</div></div><i class='qi-" + String(weather.icon) + " wxIcon'></i></div><div>AQI " + String(weather.air) + " · PM2.5 " + htmlEscape(weather.pm2p5) + "</div><div>Wind " + htmlEscape(weather.win) + "</div>" + forecastHtml + "<div>Network " + String(wifiConnected() ? "online" : "offline") + "</div></div></div>";
   page += "<div class='card warn'><h2>Alarm</h2><form action='/setalarm' method='post'><label class='check'><input type='checkbox' name='alarmEnabled'" + checkedAttr(alarmEnabled) + ">Enable alarm</label><label>Alarm time</label><input type='time' name='alarmTime' value='" + alarmHH + ":" + alarmMM + "' required><label>Alarm music</label><select name='alarmTrack'>" + alarmOptions + "</select><button>Save alarm</button></form><div class='row'><form action='/stopalarm' method='post'><button class='danger'>Stop alarm</button></form><form action='/playtrack' method='post'><input type='hidden' name='track' value='" + String(alarmTrack) + "'><button class='gray'>Test music</button></form></div></div>";
-  page += "<div class='card'><h2>Command</h2><form action='/command' method='post'><label>Natural command</label><input name='cmd' maxlength='80' placeholder='set alarm 07:30'><button>Run command</button></form><div class='result'>" + htmlEscape(lastCommandResult) + "</div><p class='muted'>Examples: alarm on, alarm off, set alarm 07:30, security on, play music 4, smoke test, clear smoke, event 2026-07-10 submit report, refresh weather, stop alarm.</p></div>";
+  page += "<div class='card'><h2>Command</h2><form action='/command' method='post'><label>Natural command</label><input name='cmd' maxlength='80' placeholder='event 2026-07-12 14:30 meeting'><button>Run command</button></form><div class='result'>" + htmlEscape(lastCommandResult) + "</div><p class='muted'>Examples: alarm on, alarm off, set alarm 07:30, security on, play music 4, smoke test, clear smoke, event 2026-07-12 14:30 meeting, refresh weather, stop alarm.</p></div>";
   page += "<div class='card'><h2>Security and Sound</h2><form action='/setsecurity' method='post'><label class='check'><input type='checkbox' name='antiTheftMode'" + checkedAttr(antiTheftMode) + ">Enable anti-theft mode</label><button>Save security</button></form><form action='/setsound' method='post'><label class='check'><input type='checkbox' name='voice'" + checkedAttr(voice) + ">Enable JQ8900 sound</label><button>Save sound</button></form></div>";
   page += "<div class='card warn'><h2>Smoke Test</h2><div class='" + String(simulatedFireAlarm ? "bad" : "ok") + "'>Simulated smoke " + String(simulatedFireAlarm ? "ON" : "OFF") + "</div><div class='row'><form action='/smoketest' method='post'><input type='hidden' name='mode' value='on'><button class='danger'>Simulate smoke/fire</button></form><form action='/smoketest' method='post'><input type='hidden' name='mode' value='off'><button class='gray'>Clear test</button></form></div><p class='muted'>For defense demo: triggers screen alarm, red light, track 3, and email without real smoke.</p></div>";
   page += "<div class='card'><h2>Event Reminder</h2>" + eventsHtml + "<p class='muted'>Screen shows the nearest event only. Current reminder: " + htmlEscape(eventReminderText()) + "</p></div>";
@@ -485,11 +504,25 @@ void handleCommand(){
     int dateStart = -1;
     if(parseDateInText(lower, y, mo, d, dateStart)){
       int slot = 0;
+      int eventH = 8;
+      int eventM = 0;
+      parseTimeInText(lower, eventH, eventM);
       eventEnabledList[slot] = true;
       eventYearList[slot] = y;
       eventMonthList[slot] = mo;
       eventDayList[slot] = d;
+      eventHourList[slot] = eventH;
+      eventMinuteList[slot] = eventM;
       int textStart = dateStart + 10;
+      while(textStart < (int)cmd.length() && (cmd[textStart] == ' ' || cmd[textStart] == '-' || cmd[textStart] == '/')){
+        textStart++;
+      }
+      if(textStart + 5 <= (int)cmd.length() && cmd[textStart + 2] == ':'){
+        textStart += 5;
+      }
+      while(textStart < (int)cmd.length() && cmd[textStart] == ' '){
+        textStart++;
+      }
       eventTextList[slot] = cmd.substring(textStart);
       eventTextList[slot].trim();
       if(eventTextList[slot].length() == 0){
@@ -498,9 +531,10 @@ void handleCommand(){
       if(eventTextList[slot].length() > 60){
         eventTextList[slot] = eventTextList[slot].substring(0, 60);
       }
-      if(isEventToday(slot)){
+      if(isEventNowOrPastToday(slot)){
         tm info = currentTimeInfo();
-        lastEventDay = (info.tm_year * 400 + info.tm_yday) * EVENT_SLOT_COUNT + slot;
+        lastEventDay = ((info.tm_year * 400 + info.tm_yday) * EVENT_SLOT_COUNT + slot) * 1440 +
+                       eventHourList[slot] * 60 + eventMinuteList[slot];
       }
       setEventPrefs();
       sensorStateChanged = true;
@@ -552,6 +586,15 @@ void handleSetEvent(){
       return;
     }
   }
+  if(server.hasArg("eventTime")){
+    String time = server.arg("eventTime");
+    if(time.length() >= 5){
+      eventHourList[slot] = time.substring(0, 2).toInt();
+      eventMinuteList[slot] = time.substring(3, 5).toInt();
+      eventHourList[slot] = constrain(eventHourList[slot], 0, 23);
+      eventMinuteList[slot] = constrain(eventMinuteList[slot], 0, 59);
+    }
+  }
   if(server.hasArg("eventText")){
     eventTextList[slot] = server.arg("eventText");
     eventTextList[slot].trim();
@@ -562,9 +605,10 @@ void handleSetEvent(){
   if(eventEnabledList[slot] && eventTextList[slot].length() == 0){
     eventTextList[slot] = "Event";
   }
-  if(isEventToday(slot)){
+  if(isEventNowOrPastToday(slot)){
     tm info = currentTimeInfo();
-    lastEventDay = (info.tm_year * 400 + info.tm_yday) * EVENT_SLOT_COUNT + slot;
+    lastEventDay = ((info.tm_year * 400 + info.tm_yday) * EVENT_SLOT_COUNT + slot) * 1440 +
+                   eventHourList[slot] * 60 + eventMinuteList[slot];
   }
   setEventPrefs();
   if(eventEnabledList[slot] && eventTextList[slot].length() > 0){

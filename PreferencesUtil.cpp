@@ -37,6 +37,8 @@ void getInfo(){
     eventYearList[i] = prefs.getInt(("eventY" + suffix).c_str(), 0);
     eventMonthList[i] = prefs.getInt(("eventM" + suffix).c_str(), 0);
     eventDayList[i] = prefs.getInt(("eventD" + suffix).c_str(), 0);
+    eventHourList[i] = prefs.getInt(("eventH" + suffix).c_str(), 8);
+    eventMinuteList[i] = prefs.getInt(("eventMin" + suffix).c_str(), 0);
     eventTextList[i] = prefs.getString(("eventT" + suffix).c_str(), "");
   }
   if(eventText.length() > 0 && eventYear > 0 && eventYearList[0] == 0){
@@ -44,6 +46,8 @@ void getInfo(){
     eventYearList[0] = eventYear;
     eventMonthList[0] = eventMonth;
     eventDayList[0] = eventDay;
+    eventHourList[0] = 8;
+    eventMinuteList[0] = 0;
     eventTextList[0] = eventText;
   }
   syncEventSummary();
@@ -115,6 +119,8 @@ void setEventPrefs(){
     prefs.putInt(("eventY" + suffix).c_str(), eventYearList[i]);
     prefs.putInt(("eventM" + suffix).c_str(), eventMonthList[i]);
     prefs.putInt(("eventD" + suffix).c_str(), eventDayList[i]);
+    prefs.putInt(("eventH" + suffix).c_str(), eventHourList[i]);
+    prefs.putInt(("eventMin" + suffix).c_str(), eventMinuteList[i]);
     prefs.putString(("eventT" + suffix).c_str(), eventTextList[i]);
   }
   prefs.end();
