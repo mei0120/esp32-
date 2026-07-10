@@ -666,12 +666,10 @@ void scanAlarmInputs(){
   logDebug("IR: ");logDebugln(String(ir));
 }
 
-String eventReminderText(){
-  int index = nextEventIndex();
-  if(index < 0 || !clockReady()){
-    return "";
+static long daysUntilEvent(int index){
+  if(index < 0 || index >= EVENT_SLOT_COUNT || !clockReady()){
+    return 99999;
   }
-
   struct tm eventTime = {};
   eventTime.tm_year = eventYearList[index] - 1900;
   eventTime.tm_mon = eventMonthList[index] - 1;
@@ -681,7 +679,7 @@ String eventReminderText(){
   eventTime.tm_sec = 0;
   time_t eventEpoch = mktime(&eventTime);
   if(eventEpoch <= 0){
-    return "";
+    return 99999;
   }
 
   tm nowInfo = currentTimeInfo();
@@ -695,12 +693,35 @@ String eventReminderText(){
   eventDayInfo.tm_sec = 0;
   time_t todayEpoch = mktime(&todayInfo);
   time_t eventDayEpoch = mktime(&eventDayInfo);
-  long daysLeft = (eventDayEpoch - todayEpoch) / 86400;
-  if(daysLeft == 1){
-    return "Tomorrow: " + eventTextList[index];
+  return (eventDayEpoch - todayEpoch) / 86400;
+}
+
+String eventReminderText(){
+  if(!clockReady()){
+    return "";
   }
-  if(daysLeft == 0){
-    return "Today " + twoDigits(eventHourList[index]) + ":" + twoDigits(eventMinuteList[index]) + " " + eventTextList[index];
+
+  int bestIndex = -1;
+  time_t bestEpoch = 2147483647;
+  for(int i = 0; i < EVENT_SLOT_COUNT; i++){
+    if(!eventEnabledList[i] || eventTextList[i].length() == 0 || daysUntilEvent(i) != 1){
+      continue;
+    }
+    struct tm eventTime = {};
+    eventTime.tm_year = eventYearList[i] - 1900;
+    eventTime.tm_mon = eventMonthList[i] - 1;
+    eventTime.tm_mday = eventDayList[i];
+    eventTime.tm_hour = eventHourList[i];
+    eventTime.tm_min = eventMinuteList[i];
+    eventTime.tm_sec = 0;
+    time_t eventEpoch = mktime(&eventTime);
+    if(eventEpoch > 0 && eventEpoch < bestEpoch){
+      bestEpoch = eventEpoch;
+      bestIndex = i;
+    }
+  }
+  if(bestIndex >= 0){
+    return "Tomorrow: " + eventTextList[bestIndex];
   }
   return "";
 }
@@ -786,29 +807,15 @@ void checkEventReminder(){
     if(!eventEnabledList[i] || eventTextList[i].length() == 0){
       continue;
     }
-    struct tm eventTime = {};
-    eventTime.tm_year = eventYearList[i] - 1900;
-    eventTime.tm_mon = eventMonthList[i] - 1;
-    eventTime.tm_mday = eventDayList[i];
-    eventTime.tm_hour = eventHourList[i];
-    eventTime.tm_min = eventMinuteList[i];
-    eventTime.tm_sec = 0;
-    time_t eventEpoch = mktime(&eventTime);
-    if(eventEpoch <= 0){
-      continue;
-    }
-    int eventKey = (todayKey * EVENT_SLOT_COUNT + i) * 1440 + eventHourList[i] * 60 + eventMinuteList[i];
-    if(info.tm_hour == eventHourList[i] && info.tm_min == eventMinuteList[i] && lastEventDay != eventKey){
+    int reminderKey = todayKey * EVENT_SLOT_COUNT + i;
+    if(daysUntilEvent(i) == 1 && lastEventDay != reminderKey){
       activeEventIndex = i;
-      eventRinging = true;
-      eventPagePending = true;
-      lastEventDay = eventKey;
+      eventRinging = false;
+      eventPagePending = false;
+      lastEventDay = reminderKey;
       sensorStateChanged = true;
       syncEventSummary();
-      logInfoln("Event reminder triggered");
-      if(voice){
-        jqPlayTrack(normalizeAlarmTrack(alarmTrack));
-      }
+      logInfoln("Event reminder subtitle shown");
       return;
     }
   }

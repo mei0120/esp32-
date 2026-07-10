@@ -238,26 +238,6 @@ static String eventInputTime(int index){
          (eventMinuteList[index] < 10 ? "0" : "") + String(eventMinuteList[index]);
 }
 
-static bool isEventToday(int index){
-  if(index < 0 || index >= EVENT_SLOT_COUNT || !clockReady()){
-    return false;
-  }
-  tm info = currentTimeInfo();
-  return eventYearList[index] == info.tm_year + 1900 &&
-         eventMonthList[index] == info.tm_mon + 1 &&
-         eventDayList[index] == info.tm_mday;
-}
-
-static bool isEventNowOrPastToday(int index){
-  if(!isEventToday(index)){
-    return false;
-  }
-  tm info = currentTimeInfo();
-  int nowMinute = info.tm_hour * 60 + info.tm_min;
-  int eventMinute = eventHourList[index] * 60 + eventMinuteList[index];
-  return nowMinute >= eventMinute;
-}
-
 void handleControl(){
   String alarmHH = alarmHour < 10 ? "0" + String(alarmHour) : String(alarmHour);
   String alarmMM = alarmMinute < 10 ? "0" + String(alarmMinute) : String(alarmMinute);
@@ -318,7 +298,7 @@ void handleControl(){
   page += "<div class='card'><h2>Command</h2><form action='/command' method='post'><label>Natural command</label><input name='cmd' maxlength='80' placeholder='event 2026-07-12 14:30 meeting'><button>Run command</button></form><div class='result'>" + htmlEscape(lastCommandResult) + "</div><p class='muted'>Examples: alarm on, alarm off, set alarm 07:30, security on, play music 4, smoke test, clear smoke, event 2026-07-12 14:30 meeting, refresh weather, stop alarm.</p></div>";
   page += "<div class='card'><h2>Security and Sound</h2><form action='/setsecurity' method='post'><label class='check'><input type='checkbox' name='antiTheftMode'" + checkedAttr(antiTheftMode) + ">Enable anti-theft mode</label><button>Save security</button></form><form action='/setsound' method='post'><label class='check'><input type='checkbox' name='voice'" + checkedAttr(voice) + ">Enable JQ8900 sound</label><button>Save sound</button></form></div>";
   page += "<div class='card warn'><h2>Smoke Test</h2><div class='" + String(simulatedFireAlarm ? "bad" : "ok") + "'>Simulated smoke " + String(simulatedFireAlarm ? "ON" : "OFF") + "</div><div class='row'><form action='/smoketest' method='post'><input type='hidden' name='mode' value='on'><button class='danger'>Simulate smoke/fire</button></form><form action='/smoketest' method='post'><input type='hidden' name='mode' value='off'><button class='gray'>Clear test</button></form></div><p class='muted'>For defense demo: triggers screen alarm, red light, track 3, and email without real smoke.</p></div>";
-  page += "<div class='card'><h2>Event Reminder</h2>" + eventsHtml + "<p class='muted'>Screen shows the nearest event only. Current reminder: " + htmlEscape(eventReminderText()) + "</p></div>";
+  page += "<div class='card'><h2>Event Reminder</h2>" + eventsHtml + "<p class='muted'>The screen shows a subtitle one day before the event. Events do not play music. Current subtitle: " + htmlEscape(eventReminderText()) + "</p></div>";
   page += "<div class='card'><h2>Clock and Data</h2><form action='/setclock' method='post'><label>Date</label><input type='date' name='date' required><label>Time</label><input type='time' name='time' step='1' required><button>Save time</button></form><div class='row'><form action='/refreshweather' method='post'><button class='gray'>Refresh weather</button></form><form action='/playtrack' method='post'><label>Play track</label><select name='track'>" + voiceOptions + "</select><button class='gray'>Play</button></form></div><p class='muted'>Tracks: 1 Haiyu Ni, 2 theft, 3 smoke/fire, 4 Tianfu, 5 Ai.</p><p class='muted'><a href='/status'>JSON status</a></p></div>";
   page += "<div class='card'><h2>Phone Alert</h2><div>Email alert " + String(fireEmailEnabled() ? "enabled" : "disabled") + "</div><div>Status " + htmlEscape(fireEmailStatusText()) + "</div><p class='muted'>Smoke/fire uses local sound/light first, then sends email when WiFi is online.</p></div>";
   page += "<div class='bottom'><div class='bottomInner'><form action='/smoketest' method='post'><input type='hidden' name='mode' value='on'><button class='danger'>Fire Demo</button></form><form action='/stopalarm' method='post'><button class='gray'>Stop Alarm</button></form></div></div>";
@@ -527,11 +507,6 @@ void handleCommand(){
       if(eventTextList[slot].length() > 60){
         eventTextList[slot] = eventTextList[slot].substring(0, 60);
       }
-      if(isEventNowOrPastToday(slot)){
-        tm info = currentTimeInfo();
-        lastEventDay = ((info.tm_year * 400 + info.tm_yday) * EVENT_SLOT_COUNT + slot) * 1440 +
-                       eventHourList[slot] * 60 + eventMinuteList[slot];
-      }
       setEventPrefs();
       sensorStateChanged = true;
       lastCommandResult = "Event 1 saved: " + eventTextList[slot];
@@ -600,11 +575,6 @@ void handleSetEvent(){
   }
   if(eventEnabledList[slot] && eventTextList[slot].length() == 0){
     eventTextList[slot] = "Event";
-  }
-  if(isEventNowOrPastToday(slot)){
-    tm info = currentTimeInfo();
-    lastEventDay = ((info.tm_year * 400 + info.tm_yday) * EVENT_SLOT_COUNT + slot) * 1440 +
-                   eventHourList[slot] * 60 + eventMinuteList[slot];
   }
   setEventPrefs();
   if(eventEnabledList[slot] && eventTextList[slot].length() > 0){
