@@ -1,0 +1,11 @@
+.pio/
+.vscode/
+.idea/
+*.log
+course_requirements_tmp.docx
+*.tmp
+*.bak
+*.elf
+*.bin
+*.map
+mail_config.h
