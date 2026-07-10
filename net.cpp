@@ -287,10 +287,6 @@ void handleControl(){
     }
     voiceOptions += "<option value='" + String(i) + "'>" + label + "</option>";
   }
-  String eventDate = "";
-  if(eventYear > 0 && eventMonth > 0 && eventDay > 0){
-    eventDate = String(eventYear) + "-" + (eventMonth < 10 ? "0" : "") + String(eventMonth) + "-" + (eventDay < 10 ? "0" : "") + String(eventDay);
-  }
   String eventsHtml = "";
   for(int i = 0; i < EVENT_SLOT_COUNT; i++){
     eventsHtml += "<form action='/setevent' method='post'><input type='hidden' name='eventSlot' value='" + String(i) + "'>";

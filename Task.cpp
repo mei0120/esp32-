@@ -15,7 +15,6 @@ bool updateWeather = false; // 鏄惁闇€瑕佹洿鏂板ぉ姘?
 // 鎸夐挳
 OneButton button1(BTN1, true);
 OneButton button2(BTN2, true);
-OneButton button3(BTN3, true);
 // 绯荤粺鍙橀噺
 int mode = OFFLINE_MODE; // 杩愯妯″紡
 bool buttonEnable = true; // 鎸夐敭浣胯兘
@@ -1286,63 +1285,6 @@ void btn2click(){
       break;
   }
 }
-void btn3click(){
-  if(!buttonEnable){
-    return;
-  }
-  Dida();
-  lastUserAction = millis();
-  if(fireAlertActive() || theftAlertActive()){
-    drawCurrentPage();
-    return;
-  }
-  switch(currentPage){
-    int lastChoosedIndex;
-    case SETTING:
-      if(settingChoosed){
-        settingChoosed = false;
-        drawSettingOrOffline(false, "");
-      } 
-      break;
-    case PAGE1:
-      if(modalShowed){
-        adjustAlarmEdit(1);
-      }else{
-        buttonEnable = false;
-        showNextMainPage();
-        buttonEnable = true;
-      }
-      break;
-    case PAGE2:
-    case PAGE3:
-      buttonEnable = false;
-      showNextMainPage();
-      buttonEnable = true;
-      break;  
-    case CONFIG:
-      if(!modalShowed){
-        buttonEnable = false;
-        lastChoosedIndex = configChoosedIndex;
-        configChoosedIndex = (configChoosedIndex + 1) < OPTION_COUNT ? (configChoosedIndex + 1) : 0;
-        drawConfigOption(lastChoosedIndex);
-        drawConfigOption(configChoosedIndex);
-        buttonEnable = true;
-      }else{
-        if(configChoosedIndex == OPTION_WLAN || configChoosedIndex == OPTION_RESET){
-          modalLeftChoosed = false;
-          drawModal("", false);
-        }
-      }
-      break;
-    case CALENDAR:
-      buttonEnable = false;
-      showNextMainPage();
-      buttonEnable = true;
-      break;
-    default:
-      break;
-  }
-}
 void btn1LongClick(){
   if(!buttonEnable){
     return;
@@ -1404,28 +1346,10 @@ void btn2LongClick(){
   currentPage = PAGE2;
   drawPage2Full();
 }
-void btn3LongClick(){
-  if(!buttonEnable || modalShowed){
-    return;
-  }
-  Dida();
-  lastUserAction = millis();
-  buttonEnable = false;
-  showNextMainPage();
-  buttonEnable = true;
-}
 void btn1DuringLongPress(){
   if(modalShowed){
     if(currentPage == PAGE1){
       adjustAlarmEdit(-1);
-    }
-    delay(10);
-  }
-}
-void btn3DuringLongPress(){
-  if(modalShowed){
-    if(currentPage == PAGE1){
-      adjustAlarmEdit(1);
     }
     delay(10);
   }

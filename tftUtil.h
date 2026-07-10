@@ -19,28 +19,6 @@
 #define OPTION_RESET 7
 #define OPTION_BACK 8
 #define OPTION_COUNT 9
-#define TVOC_LV1  0.6
-#define TVOC_LV2  1
-#define TVOC_LV3  1.5
-#define CH2O_LV1  0.1
-#define CH2O_LV2  0.3
-#define CH2O_LV3  0.5
-#define CO2_LV1   450
-#define CO2_LV2   1000
-#define CO2_LV3   2000
-#define TEM_LV1   35
-#define TEM_LV2   50
-#define TEM_LV3   65
-#define HUM_LV1   65
-#define HUM_LV2   80
-#define HUM_LV3   95
-#define AQI_LV1   50
-#define AQI_LV2   100
-#define AQI_LV3   150
-#define COLOR_LV1 0x0E27
-#define COLOR_LV2 0xFFE0
-#define COLOR_LV3 0xFBE3
-#define COLOR_LV4 0xF800
 #define CALENDAR_RIGHT_OFFSET 0
 #define CALENDAR_LEFT_OFFSET  1
 
@@ -50,8 +28,6 @@ extern int backColor;
 extern int bright;
 extern uint16_t backFillColor;
 extern uint16_t penColor;
-extern int zoneIndex[];
-extern int currentBigZone;
 extern int configChoosedIndex;
 extern bool modalLeftChoosed;
 extern int displayMinute;
@@ -66,7 +42,6 @@ void initBacklight();
 void setBacklight(int value);
 void fadeOff();
 void fadeOn();
-uint16_t getColor(float value, int type);
 void drawStartLoadingAnim();
 void drawSettingOrOffline(bool refresh, String text);
 void draw2LineText(String text1, String text2);
@@ -79,21 +54,14 @@ void drawSecurityAlarmPage();
 void drawReminderStatus();
 void drawStatusSensorBlock();
 void drawTop();
-void drawPage1Z(int type, int offsetX, int offsetY);
-void drawPage1SZ(int x, int y, int type, int offsetX, int offsetY);
-void drawPage1BZ(int type, int offsetX, int offsetY);
 void drawPage2();
 void drawPage2Full();
 void drawClockSecond();
-void draw2Page2Sensors();
 void drawWeatherIconAt(int x, int y);
 void drawPage3(bool refresh);
 void drawConfig();
 void drawCalendar();
-void drawCalendarDate();
 void drawModal(String text, bool refresh);
-void drawBrightModal(bool refresh);
-void drawOffsetModal(bool refresh);
 void drawAlarmModal(bool refresh);
 void drawConfigOption(int index);
 void exchangeTheme();
