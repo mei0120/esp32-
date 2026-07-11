@@ -241,6 +241,7 @@ void loop(){
     buttonEnable = true;
     drawAlarmRingingPage();
     lastRefresh = millis();
+    return;
   }
   if(eventPagePending){
     eventPagePending = false;
@@ -249,6 +250,10 @@ void loop(){
     buttonEnable = true;
     drawEventRingingPage();
     lastRefresh = millis();
+    return;
+  }
+  if(alarmRinging || eventRinging){
+    return;
   }
   switch(currentPage){
     case SETTING:

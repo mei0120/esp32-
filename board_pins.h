@@ -27,7 +27,7 @@
 // RGB LED
 #define PIN_WS2812 33
 #define WS2812_LED_COUNT 16
-#define WS2812_COLOR_ORDER GRB
+#define WS2812_COLOR_ORDER RGB
 
 // Trigger levels. Change these after real board testing if the modules are active-high.
 #define MQ2_TRIGGER_LEVEL LOW

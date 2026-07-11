@@ -76,9 +76,6 @@ unsigned long baseMillis = 0;
 int lastAlarmDay = -1;
 int lastEventDay = -1;
 int lastEventSubtitleDay = -1;
-unsigned long lastFireVoiceMillis = 0;
-unsigned long lastTheftVoiceMillis = 0;
-unsigned long lastAlarmVoiceMillis = 0;
 CRGB lastWarningLight = CRGB::Black;
 const uint8_t JQ_DEFAULT_VOLUME = 8;
 const uint16_t JQ_BUTTON_TRACK = 1;
@@ -86,9 +83,18 @@ const uint16_t JQ_ALARM_TRACKS[] = {1, 4, 5};
 const uint8_t JQ_ALARM_TRACK_COUNT = sizeof(JQ_ALARM_TRACKS) / sizeof(JQ_ALARM_TRACKS[0]);
 const uint16_t JQ_THEFT_TRACK = 2;
 const uint16_t JQ_FIRE_TRACK = 3;
-const unsigned long ALARM_VOICE_INTERVAL_MS = 3000UL;
-const unsigned long FIRE_VOICE_INTERVAL_MS = 6000UL;
-const unsigned long THEFT_VOICE_INTERVAL_MS = 6000UL;
+const unsigned long JQ_REPLAY_GAP_MS = 3000UL;
+const unsigned long JQ_STATUS_QUERY_MS = 1000UL;
+enum VoiceRepeatMode { VOICE_REPEAT_NONE, VOICE_REPEAT_ALARM, VOICE_REPEAT_FIRE, VOICE_REPEAT_THEFT };
+VoiceRepeatMode repeatVoiceMode = VOICE_REPEAT_NONE;
+uint16_t repeatVoiceTrack = 0;
+uint8_t jqPlaybackStatus = 0xFF;
+bool repeatStopDetected = false;
+unsigned long repeatStoppedAt = 0;
+unsigned long lastJqStatusQueryMillis = 0;
+unsigned long fireNormalSince = 0;
+unsigned long theftNormalSince = 0;
+const unsigned long SENSOR_ACK_RESET_MS = 3000UL;
 // ADC鍖哄煙
 float batteryMin = 2.9f;
 float batteryMax = 4.2f;
@@ -104,6 +110,7 @@ void updateWarningLight();
 tm currentTimeInfo();
 void jqPlayTrack(uint16_t track);
 void jqStop();
+void updateRepeatingVoice();
 
 bool fireAlertActive(){
   return fireAlarm && !fireAlarmAcknowledged;
@@ -142,7 +149,7 @@ void stopAllAlerts(){
     simulatedFireAlarm = false;
     fireAlarm = (digitalRead(PIN_MQ2) == MQ2_TRIGGER_LEVEL);
     if(!fireAlarm){
-      fireAlarmAcknowledged = false;
+      fireNormalSince = millis();
     }
   }
   if(theftAlertActive()){
@@ -157,11 +164,7 @@ void stopAllAlerts(){
   alarmEditField = 0;
   jqStop();
   updateWarningLight();
-  sensorStateChanged = true;
-  if(hadWarning){
-    drawCurrentPage();
-    lastRefresh = millis();
-  }
+  sensorStateChanged = false;
 }
 
 uint16_t normalizeAlarmTrack(int track){
@@ -194,15 +197,11 @@ void setSimulatedFireAlarm(bool enabled, bool forceNotify){
   }else{
     fireAlarm = (digitalRead(PIN_MQ2) == MQ2_TRIGGER_LEVEL);
     if(!fireAlarm){
-      fireAlarmAcknowledged = false;
+      fireNormalSince = millis();
     }
   }
   if(fireAlarm != oldFireAlarm){
     sensorStateChanged = true;
-  }
-  if(fireAlarm && voice && (forceNotify || !oldFireAlarm || millis() - lastFireVoiceMillis >= FIRE_VOICE_INTERVAL_MS)){
-    jqPlayTrack(JQ_FIRE_TRACK);
-    lastFireVoiceMillis = millis();
   }
   if(fireAlarm && (forceNotify || !oldFireAlarm)){
     requestFireEmailAlert(forceNotify);
@@ -237,7 +236,6 @@ void finishAlarmEdit(){
   alarmEditField = 0;
   alarmEnabled = true;
   alarmRinging = false;
-  lastAlarmVoiceMillis = 0;
   skipTodayIfAlarmMatchesNow();
   updateWarningLight();
   setAlarmPrefs();
@@ -285,7 +283,6 @@ void stopAlarmRinging(){
     return;
   }
   alarmRinging = false;
-  lastAlarmVoiceMillis = 0;
   jqStop();
   alarmPagePending = false;
   modalShowed = false;
@@ -542,6 +539,54 @@ void jqSendCommand(uint8_t command){
   jqSendCommand(command, nullptr, 0);
 }
 
+void jqReadResponses(){
+  static uint8_t frame[12];
+  static uint8_t index = 0;
+  static uint8_t expectedLength = 0;
+
+  while(jq.available()){
+    uint8_t value = jq.read();
+    if(index == 0 && value != 0xAA){
+      continue;
+    }
+    frame[index++] = value;
+
+    if(index == 3){
+      expectedLength = frame[2];
+      if(expectedLength > 8){
+        index = 0;
+        expectedLength = 0;
+      }
+    }
+
+    if(index >= 4 && index == (uint8_t)(expectedLength + 4)){
+      uint8_t checksum = 0;
+      for(uint8_t i = 0; i < index - 1; i++){
+        checksum += frame[i];
+      }
+      if(checksum == frame[index - 1] && frame[1] == 0x01 && expectedLength == 1){
+        jqPlaybackStatus = frame[3];
+      }
+      index = 0;
+      expectedLength = 0;
+    }
+  }
+}
+
+void jqQueryStatus(){
+  jqSendCommand(0x01);
+  lastJqStatusQueryMillis = millis();
+}
+
+void resetRepeatVoiceState(){
+  repeatVoiceMode = VOICE_REPEAT_NONE;
+  repeatVoiceTrack = 0;
+  repeatStopDetected = false;
+  repeatStoppedAt = 0;
+  lastJqStatusQueryMillis = 0;
+  jqPlaybackStatus = 0xFF;
+}
+
 void jqSetVolume(uint8_t volume){
   uint8_t data[] = { (uint8_t)constrain(volume, 0, 30) };
   jqSendCommand(0x13, data, 1);
@@ -554,15 +599,82 @@ void jqPlayTrack(uint16_t track){
   logInfoln(String(track));
   uint8_t data[] = { (uint8_t)(track >> 8), (uint8_t)(track & 0xFF) };
   jqSendCommand(0x07, data, 2);
+  jqPlaybackStatus = 0xFF;
+  repeatStopDetected = false;
 }
 
 void jqStop(){
   logInfoln("JQ8900 stop");
   jqSendCommand(0x04);
+  resetRepeatVoiceState();
 }
 
 void playVoiceTrack(int track){
   jqPlayTrack((uint16_t)constrain(track, 1, 999));
+}
+
+VoiceRepeatMode desiredVoiceMode(uint16_t &track){
+  if(fireAlertActive()){
+    track = JQ_FIRE_TRACK;
+    return VOICE_REPEAT_FIRE;
+  }
+  if(theftAlertActive()){
+    track = JQ_THEFT_TRACK;
+    return VOICE_REPEAT_THEFT;
+  }
+  if(alarmRinging){
+    track = normalizeAlarmTrack(alarmTrack);
+    return VOICE_REPEAT_ALARM;
+  }
+  track = 0;
+  return VOICE_REPEAT_NONE;
+}
+
+void startRepeatVoice(VoiceRepeatMode mode, uint16_t track){
+  repeatVoiceMode = mode;
+  repeatVoiceTrack = track;
+  repeatStopDetected = false;
+  repeatStoppedAt = 0;
+  jqPlayTrack(track);
+  jqQueryStatus();
+}
+
+void updateRepeatingVoice(){
+  jqReadResponses();
+
+  uint16_t desiredTrack = 0;
+  VoiceRepeatMode desiredMode = desiredVoiceMode(desiredTrack);
+  if(!voice || desiredMode == VOICE_REPEAT_NONE){
+    if(repeatVoiceMode != VOICE_REPEAT_NONE){
+      jqStop();
+    }
+    return;
+  }
+
+  if(repeatVoiceMode != desiredMode || repeatVoiceTrack != desiredTrack){
+    startRepeatVoice(desiredMode, desiredTrack);
+    return;
+  }
+
+  if(lastJqStatusQueryMillis == 0 || (millis() - lastJqStatusQueryMillis) >= JQ_STATUS_QUERY_MS){
+    jqQueryStatus();
+  }
+
+  if(jqPlaybackStatus == 0x01){
+    repeatStopDetected = false;
+    return;
+  }
+
+  if(jqPlaybackStatus == 0x00){
+    if(!repeatStopDetected){
+      repeatStopDetected = true;
+      repeatStoppedAt = millis();
+      return;
+    }
+    if((millis() - repeatStoppedAt) >= JQ_REPLAY_GAP_MS){
+      startRepeatVoice(desiredMode, desiredTrack);
+    }
+  }
 }
 
 void sensorsInit(){
@@ -671,31 +783,39 @@ void scanAlarmInputs(){
   int ir = digitalRead(PIN_IR);
   fireAlarm = simulatedFireAlarm || (mq2 == MQ2_TRIGGER_LEVEL);
   infraredDetected = (ir == IR_TRIGGER_LEVEL);
-  if(fireAlarm && !oldFireAlarm){
-    fireAlarmAcknowledged = false;
-    lastFireVoiceMillis = 0;
-  }else if(!fireAlarm){
-    fireAlarmAcknowledged = false;
+
+  if(fireAlarm){
+    if(!oldFireAlarm && (fireNormalSince == 0 || (millis() - fireNormalSince) >= SENSOR_ACK_RESET_MS)){
+      fireAlarmAcknowledged = false;
+    }
+    fireNormalSince = 0;
+  }else{
+    if(fireNormalSince == 0){
+      fireNormalSince = millis();
+    }
+    if((millis() - fireNormalSince) >= SENSOR_ACK_RESET_MS){
+      fireAlarmAcknowledged = false;
+    }
   }
-  if(antiTheftMode && infraredDetected && !oldInfraredDetected){
-    theftAlarmAcknowledged = false;
-    lastTheftVoiceMillis = 0;
-  }else if(!infraredDetected || !antiTheftMode){
-    theftAlarmAcknowledged = false;
+
+  if(antiTheftMode && infraredDetected){
+    if(!oldInfraredDetected && (theftNormalSince == 0 || (millis() - theftNormalSince) >= SENSOR_ACK_RESET_MS)){
+      theftAlarmAcknowledged = false;
+    }
+    theftNormalSince = 0;
+  }else{
+    if(theftNormalSince == 0){
+      theftNormalSince = millis();
+    }
+    if((millis() - theftNormalSince) >= SENSOR_ACK_RESET_MS){
+      theftAlarmAcknowledged = false;
+    }
   }
   if(fireAlarm != oldFireAlarm || infraredDetected != oldInfraredDetected){
     sensorStateChanged = true;
   }
-  if(fireAlertActive() && voice && (lastFireVoiceMillis == 0 || millis() - lastFireVoiceMillis >= FIRE_VOICE_INTERVAL_MS)){
-    jqPlayTrack(JQ_FIRE_TRACK);
-    lastFireVoiceMillis = millis();
-  }
   if(fireAlarm && !oldFireAlarm){
     requestFireEmailAlert();
-  }
-  if(theftAlertActive() && voice && (lastTheftVoiceMillis == 0 || millis() - lastTheftVoiceMillis >= THEFT_VOICE_INTERVAL_MS)){
-    jqPlayTrack(JQ_THEFT_TRACK);
-    lastTheftVoiceMillis = millis();
   }
   updateWarningLight();
   logDebug("MQ2: ");logDebugln(String(mq2));
@@ -874,27 +994,15 @@ void checkEventReminder(){
   syncEventSummary();
 }
 
-void playAlarmSound(){
-  if(!voice){
-    return;
-  }
-  jqPlayTrack(normalizeAlarmTrack(alarmTrack));
-  lastAlarmVoiceMillis = millis();
-}
-
 void checkAlarm(){
   if(!alarmEnabled || !clockReady()){
     if(alarmRinging){
       alarmRinging = false;
-      lastAlarmVoiceMillis = 0;
       updateWarningLight();
     }
     return;
   }
   if(alarmRinging){
-    if(voice && (lastAlarmVoiceMillis == 0 || millis() - lastAlarmVoiceMillis >= ALARM_VOICE_INTERVAL_MS)){
-      playAlarmSound();
-    }
     return;
   }
   if(currentPage == PAGE1 && modalShowed){
@@ -906,7 +1014,6 @@ void checkAlarm(){
     alarmRinging = true;
     lastAlarmDay = dayKey;
     logInfoln("Alarm triggered");
-    playAlarmSound();
     updateWarningLight();
     modalShowed = false;
     alarmEditField = 0;
@@ -951,6 +1058,7 @@ void anotherCore_task(void *pvParameters){
     scanAlarmInputs();
     checkAlarm();
     checkEventReminder();
+    updateRepeatingVoice();
     updateWarningLight();
     vTaskDelay(1000);
   }

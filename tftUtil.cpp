@@ -511,7 +511,9 @@ void drawPage2(){
     tft.fillRect(0, 222, 320, 18, TFT_RED);
     drawAsciiText(safeEventLine(eventLine).substring(0, 38), 160, 224, 2, TFT_WHITE, TC_DATUM);
   }else{
-    tft.fillRect(0, 222, 320, 18, backFillColor);
+    uint16_t idleBar = backColor == BACK_BLACK ? tft.color565(20, 28, 38) : tft.color565(238, 244, 248);
+    tft.fillRect(0, 222, 320, 18, idleBar);
+    drawAsciiTextOnBg("No event today", 160, 224, 2, penColor, idleBar, TC_DATUM);
   }
 
   displayMinute = currentMinute();
@@ -525,13 +527,13 @@ void drawPage2Full(){
 }
 
 void drawClockSecond(){
-  clk.createSprite(96, 22);
+  clk.createSprite(92, 22);
   clk.fillSprite(tft.color565(83, 128, 255));
   clk.setTextDatum(CC_DATUM);
   clk.setTextColor(TFT_WHITE);
   clk.loadFont(page2sensor_16);
-  clk.drawString("SEC " + format2(currentSecond()), 48, 12);
-  clk.pushSprite(6, 182);
+  clk.drawString("SEC " + format2(currentSecond()), 46, 12);
+  clk.pushSprite(8, 182);
   clk.unloadFont();
   clk.deleteSprite();
 }
