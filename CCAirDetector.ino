@@ -187,6 +187,7 @@ void setup(){
 
 void loop(){
   static bool alarmOverlayShown = false;
+  static int shownWarningType = 0;
   doClient();
   processMailAlert();
   if(updateWeather){
@@ -209,16 +210,19 @@ void loop(){
     createFadeOnTask();
   }
   watchBtn();
-  if(fireAlertActive() || theftAlertActive()){
-    if(!alarmOverlayShown || sensorStateChanged){
+  int warningType = fireAlertActive() ? 1 : (theftAlertActive() ? 2 : 0);
+  if(warningType != 0){
+    if(!alarmOverlayShown || shownWarningType != warningType){
       drawCurrentPage();
       alarmOverlayShown = true;
+      shownWarningType = warningType;
       sensorStateChanged = false;
       lastRefresh = millis();
     }
     return;
   }else if(alarmOverlayShown){
     alarmOverlayShown = false;
+    shownWarningType = 0;
     sensorStateChanged = false;
     drawCurrentPage();
     lastRefresh = millis();

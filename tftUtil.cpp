@@ -151,7 +151,13 @@ static void asciiGlyph(char c, uint8_t glyph[5]){
   memcpy(glyph, src, 5);
 }
 
+static void drawAsciiTextOnBg(const String &text, int x, int y, uint8_t font, uint16_t color, uint16_t bg, uint8_t datum = TL_DATUM);
+
 static void drawAsciiText(const String &text, int x, int y, uint8_t font, uint16_t color, uint8_t datum = TL_DATUM){
+  drawAsciiTextOnBg(text, x, y, font, color, backFillColor, datum);
+}
+
+static void drawAsciiTextOnBg(const String &text, int x, int y, uint8_t font, uint16_t color, uint16_t bg, uint8_t datum){
   uint8_t scale = font >= 4 ? 3 : 2;
   int width = text.length() == 0 ? 0 : (int)text.length() * 6 * scale - scale;
   if(width > 310 && scale > 1){
@@ -170,7 +176,7 @@ static void drawAsciiText(const String &text, int x, int y, uint8_t font, uint16
     y -= height;
   }
 
-  tft.fillRect(x, y, width + scale, height, backFillColor);
+  tft.fillRect(x, y, width + scale, height, bg);
   for(uint16_t i = 0; i < text.length(); i++){
     uint8_t glyph[5];
     asciiGlyph(text[i], glyph);
@@ -343,6 +349,7 @@ void drawPage1(){
   drawReminderStatus();
   drawAsciiText(alarmRinging ? "BN2 Stop" : "BN2 Set", 16, 222, 2, penColor);
   drawAsciiText("BN1 Next", 234, 222, 2, penColor);
+  displayMinute = currentMinute();
 }
 
 void drawReminderStatus(){
@@ -371,6 +378,7 @@ void drawReminderStatus(){
   String alarmState = alarmRinging ? "Alarm RINGING" : "Alarm idle";
   drawAsciiText(alarmState, 24, 194, 2, alarmRinging ? TFT_RED : penColor);
   drawAsciiText(eventEnabled ? "Event ON" : "Event OFF", 206, 194, 2, penColor);
+  displayMinute = currentMinute();
 }
 
 void drawAlarmRingingPage(){
@@ -394,27 +402,23 @@ void drawEventRingingPage(){
 }
 
 void drawFireAlarmPage(){
-  tft.fillScreen(TFT_RED);
-  backFillColor = TFT_RED;
-  drawAsciiText("FIRE ALARM", 160, 42, 4, TFT_WHITE, MC_DATUM);
-  drawAsciiText("SMOKE / FIRE DETECTED", 160, 88, 2, TFT_WHITE, MC_DATUM);
-  drawAsciiText("Track 3 + red light + email", 160, 122, 2, TFT_WHITE, MC_DATUM);
-  drawAsciiText("Press BN2 to stop", 160, 154, 2, TFT_WHITE, MC_DATUM);
+  tft.fillScreen(TFT_BLUE);
+  drawAsciiTextOnBg("FIRE ALARM", 160, 42, 4, TFT_WHITE, TFT_BLUE, MC_DATUM);
+  drawAsciiTextOnBg("SMOKE / FIRE DETECTED", 160, 88, 2, TFT_WHITE, TFT_BLUE, MC_DATUM);
+  drawAsciiTextOnBg("TRACK 3 RED LIGHT EMAIL", 160, 122, 2, TFT_WHITE, TFT_BLUE, MC_DATUM);
+  drawAsciiTextOnBg("PRESS BN2 TO STOP", 160, 154, 2, TFT_WHITE, TFT_BLUE, MC_DATUM);
   tft.drawRoundRect(50, 178, 220, 38, 6, TFT_WHITE);
-  drawAsciiText(simulatedFireAlarm ? "Demo alarm active" : "MQ2 alarm active", 160, 197, 2, TFT_WHITE, MC_DATUM);
-  backFillColor = backColor == BACK_BLACK ? 0x0000 : 0xFFFF;
+  drawAsciiTextOnBg(simulatedFireAlarm ? "DEMO ALARM ACTIVE" : "MQ2 ALARM ACTIVE", 160, 197, 2, TFT_WHITE, TFT_BLUE, MC_DATUM);
 }
 
 void drawSecurityAlarmPage(){
-  tft.fillScreen(TFT_RED);
-  backFillColor = TFT_RED;
-  drawAsciiText("SECURITY ALARM", 160, 42, 4, TFT_WHITE, MC_DATUM);
-  drawAsciiText("IR DETECTED", 160, 88, 2, TFT_WHITE, MC_DATUM);
-  drawAsciiText("Track 2 + red light", 160, 122, 2, TFT_WHITE, MC_DATUM);
-  drawAsciiText("Press BN2 to stop", 160, 154, 2, TFT_WHITE, MC_DATUM);
+  tft.fillScreen(TFT_BLUE);
+  drawAsciiTextOnBg("SECURITY ALARM", 160, 42, 4, TFT_WHITE, TFT_BLUE, MC_DATUM);
+  drawAsciiTextOnBg("IR DETECTED", 160, 88, 2, TFT_WHITE, TFT_BLUE, MC_DATUM);
+  drawAsciiTextOnBg("TRACK 2 RED LIGHT", 160, 122, 2, TFT_WHITE, TFT_BLUE, MC_DATUM);
+  drawAsciiTextOnBg("PRESS BN2 TO STOP", 160, 154, 2, TFT_WHITE, TFT_BLUE, MC_DATUM);
   tft.drawRoundRect(50, 178, 220, 38, 6, TFT_WHITE);
-  drawAsciiText("Anti-theft mode active", 160, 197, 2, TFT_WHITE, MC_DATUM);
-  backFillColor = backColor == BACK_BLACK ? 0x0000 : 0xFFFF;
+  drawAsciiTextOnBg("ANTI THEFT MODE ACTIVE", 160, 197, 2, TFT_WHITE, TFT_BLUE, MC_DATUM);
 }
 // 缁樺埗PAGE2
 void drawPage2(){
@@ -441,9 +445,17 @@ void drawPage2(){
   String hourText = hourDisplay < 10 ? "0" + String(hourDisplay) : String(hourDisplay);
   String minuteText = format2(currentMinute());
   String secondText = format2(currentSecond());
+  uint16_t datePanel = backColor == BACK_BLACK ? tft.color565(16, 35, 48) : tft.color565(232, 248, 250);
+  uint16_t timePanel = backColor == BACK_BLACK ? tft.color565(10, 23, 34) : tft.color565(255, 252, 240);
+  uint16_t statusPanel = backColor == BACK_BLACK ? tft.color565(24, 30, 42) : tft.color565(246, 248, 252);
+  uint16_t mint = tft.color565(0, 190, 170);
+  uint16_t blue = tft.color565(83, 128, 255);
+  uint16_t amber = tft.color565(236, 170, 45);
+  uint16_t pink = tft.color565(238, 92, 132);
 
   clk.createSprite(320, 34);
   clk.fillSprite(backFillColor);
+  clk.fillRoundRect(8, 2, 304, 30, 7, datePanel);
   clk.loadFont(page3_18);
   clk.setTextColor(penColor);
   if(tm_ptr != nullptr){
@@ -460,6 +472,8 @@ void drawPage2(){
   clk.createSprite(320, 118);
   clk.loadFont(page3Num_90);
   clk.fillSprite(backFillColor);
+  clk.fillRoundRect(8, 4, 304, 108, 8, timePanel);
+  clk.drawRoundRect(8, 4, 304, 108, 8, mint);
   clk.setTextDatum(CC_DATUM);
   clk.setTextColor(penColor);
   clk.drawString(hourText + ":" + minuteText, 160, 62);
@@ -470,13 +484,23 @@ void drawPage2(){
   clk.createSprite(320, 58);
   clk.fillSprite(backFillColor);
   clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(penColor);
   clk.loadFont(page2sensor_16);
+  clk.fillRoundRect(8, 4, 92, 22, 6, blue);
+  clk.fillRoundRect(114, 4, 92, 22, 6, mint);
+  clk.fillRoundRect(220, 4, 92, 22, 6, weather.air > 100 ? pink : amber);
+  clk.setTextColor(TFT_WHITE);
   clk.drawString("SEC " + secondText, 50, 14);
   clk.drawString("IN " + temperature + " C", 150, 14);
   clk.drawString("AQI " + String(weather.air), 260, 14);
+  clk.fillRoundRect(8, 34, 92, 20, 6, statusPanel);
+  clk.fillRoundRect(114, 34, 92, 20, 6, infraredDetected ? pink : statusPanel);
+  clk.fillRoundRect(220, 34, 92, 20, 6, alarmEnabled ? amber : statusPanel);
+  clk.setTextColor(infraredDetected || alarmEnabled ? TFT_WHITE : penColor);
+  clk.setTextColor(penColor);
   clk.drawString(String("WiFi ") + (mode == ONLINE_MODE ? "ON" : "OFF"), 52, 42);
+  clk.setTextColor(infraredDetected ? TFT_WHITE : penColor);
   clk.drawString(String("IR ") + (infraredDetected ? "ON" : "OFF"), 158, 42);
+  clk.setTextColor(alarmEnabled ? TFT_WHITE : penColor);
   clk.drawString(String("ALM ") + (alarmEnabled ? "ON" : "OFF"), 264, 42);
   clk.pushSprite(0, 178);
   clk.unloadFont();
@@ -486,6 +510,8 @@ void drawPage2(){
   if(eventLine.length() > 0){
     tft.fillRect(0, 222, 320, 18, TFT_RED);
     drawAsciiText(safeEventLine(eventLine).substring(0, 38), 160, 224, 2, TFT_WHITE, TC_DATUM);
+  }else{
+    tft.fillRect(0, 222, 320, 18, backFillColor);
   }
 
   displayMinute = currentMinute();
@@ -500,12 +526,12 @@ void drawPage2Full(){
 
 void drawClockSecond(){
   clk.createSprite(96, 22);
-  clk.fillSprite(backFillColor);
+  clk.fillSprite(tft.color565(83, 128, 255));
   clk.setTextDatum(CC_DATUM);
-  clk.setTextColor(penColor);
+  clk.setTextColor(TFT_WHITE);
   clk.loadFont(page2sensor_16);
   clk.drawString("SEC " + format2(currentSecond()), 48, 12);
-  clk.pushSprite(2, 178);
+  clk.pushSprite(6, 182);
   clk.unloadFont();
   clk.deleteSprite();
 }
@@ -555,9 +581,8 @@ void drawPage3(bool refresh){
   uint16_t panelColor = backColor == BACK_BLACK ? tft.color565(18, 24, 30) : tft.color565(238, 242, 246);
   uint16_t softColor = backColor == BACK_BLACK ? tft.color565(30, 40, 49) : tft.color565(222, 230, 236);
   uint16_t accentColor = tft.color565(0, 190, 170);
-  uint16_t warnColor = (fireAlarm || infraredDetected) ? TFT_RED : accentColor;
 
-  clk.createSprite(320, 216);
+  clk.createSprite(320, 66);
   clk.fillSprite(backFillColor);
   clk.setTextDatum(TL_DATUM);
 
@@ -571,9 +596,15 @@ void drawPage3(bool refresh){
   clk.drawString(String(weather.temp) + "C", 238, 20);
   clk.setTextDatum(TL_DATUM);
   clk.unloadFont();
+  clk.pushSprite(0, 24);
+  clk.deleteSprite();
+  drawWeatherIconAt(250, 33);
 
+  clk.createSprite(320, 55);
+  clk.fillSprite(backFillColor);
+  clk.setTextDatum(TL_DATUM);
   clk.loadFont(page2sensor_16);
-  const int cardY = 76;
+  const int cardY = 6;
   const int cardW = 70;
   const int cardH = 43;
   const int cardX[] = {10, 86, 162, 238};
@@ -592,34 +623,42 @@ void drawPage3(bool refresh){
     clk.drawString(values[i].substring(0, 7), cardX[i] + 8, cardY + 25);
   }
   clk.unloadFont();
+  clk.pushSprite(0, 94);
+  clk.deleteSprite();
 
-  clk.fillRoundRect(10, 130, 300, 34, 6, panelColor);
+  clk.createSprite(320, 40);
+  clk.fillSprite(backFillColor);
+  clk.setTextDatum(TL_DATUM);
+  clk.fillRoundRect(10, 3, 300, 34, 6, panelColor);
   clk.loadFont(page2sensor_16);
   clk.setTextColor(penColor);
-  clk.drawString("Wind " + screenSafeText(weather.win, "--").substring(0, 15), 22, 140);
-  clk.setTextColor(warnColor);
+  clk.drawString("Wind " + screenSafeText(weather.win, "--").substring(0, 15), 22, 13);
+  clk.setTextColor(accentColor);
   clk.setTextDatum(TR_DATUM);
-  clk.drawString(String("Safe ") + ((fireAlarm || infraredDetected) ? "ALERT" : "OK"), 298, 140);
+  clk.drawString("3D Forecast", 298, 13);
   clk.setTextDatum(TL_DATUM);
   clk.unloadFont();
+  clk.pushSprite(0, 149);
+  clk.deleteSprite();
 
-  clk.fillRoundRect(10, 174, 300, 38, 6, panelColor);
+  clk.createSprite(320, 43);
+  clk.fillSprite(backFillColor);
+  clk.setTextDatum(TL_DATUM);
+  clk.fillRoundRect(10, 2, 300, 38, 6, panelColor);
   clk.loadFont(page2sensor_16);
   clk.setTextColor(penColor);
   if(weather.forecastReady){
     for(int i = 0; i < weather.forecastCount && i < 2; i++){
       String line = weather.forecast[i].date.substring(5) + " " + weather.forecast[i].text + " " +
                     String(weather.forecast[i].tempMin) + "-" + String(weather.forecast[i].tempMax) + "C";
-      clk.drawString(line.substring(0, 30), 22, 181 + i * 17);
+      clk.drawString(line.substring(0, 30), 22, 9 + i * 17);
     }
   }else{
-    clk.drawString("Forecast waiting", 22, 188);
+    clk.drawString("Forecast waiting", 22, 14);
   }
   clk.unloadFont();
-
-  clk.pushSprite(0, 24);
+  clk.pushSprite(0, 189);
   clk.deleteSprite();
-  drawWeatherIconAt(250, 33);
 }
 
 void drawStatusSensorBlock(){
@@ -1003,9 +1042,9 @@ void drawConfigOption(int index){
   }
   if(index == OPTION_THEME){
     if(backColor == BACK_BLACK){
-      clk.drawString("Dark", 300, 12);
+      clk.drawString("Dark", 285, 12);
     }else{
-      clk.drawString("Light", 300, 12);
+      clk.drawString("Light", 285, 12);
     }
   }
   if(index == OPTION_OFFSET){

@@ -75,8 +75,10 @@ unsigned long baseEpoch = 0;
 unsigned long baseMillis = 0;
 int lastAlarmDay = -1;
 int lastEventDay = -1;
+int lastEventSubtitleDay = -1;
 unsigned long lastFireVoiceMillis = 0;
 unsigned long lastTheftVoiceMillis = 0;
+unsigned long lastAlarmVoiceMillis = 0;
 CRGB lastWarningLight = CRGB::Black;
 const uint8_t JQ_DEFAULT_VOLUME = 8;
 const uint16_t JQ_BUTTON_TRACK = 1;
@@ -84,6 +86,7 @@ const uint16_t JQ_ALARM_TRACKS[] = {1, 4, 5};
 const uint8_t JQ_ALARM_TRACK_COUNT = sizeof(JQ_ALARM_TRACKS) / sizeof(JQ_ALARM_TRACKS[0]);
 const uint16_t JQ_THEFT_TRACK = 2;
 const uint16_t JQ_FIRE_TRACK = 3;
+const unsigned long ALARM_VOICE_INTERVAL_MS = 3000UL;
 const unsigned long FIRE_VOICE_INTERVAL_MS = 6000UL;
 const unsigned long THEFT_VOICE_INTERVAL_MS = 6000UL;
 // ADC鍖哄煙
@@ -132,6 +135,35 @@ void acknowledgeActiveWarning(){
   }
 }
 
+void stopAllAlerts(){
+  bool hadWarning = fireAlertActive() || theftAlertActive() || simulatedFireAlarm || alarmRinging || eventRinging || eventPagePending;
+  if(fireAlertActive() || simulatedFireAlarm){
+    fireAlarmAcknowledged = true;
+    simulatedFireAlarm = false;
+    fireAlarm = (digitalRead(PIN_MQ2) == MQ2_TRIGGER_LEVEL);
+    if(!fireAlarm){
+      fireAlarmAcknowledged = false;
+    }
+  }
+  if(theftAlertActive()){
+    theftAlarmAcknowledged = true;
+  }
+  alarmRinging = false;
+  alarmPagePending = false;
+  eventRinging = false;
+  eventPagePending = false;
+  activeEventIndex = -1;
+  modalShowed = false;
+  alarmEditField = 0;
+  jqStop();
+  updateWarningLight();
+  sensorStateChanged = true;
+  if(hadWarning){
+    drawCurrentPage();
+    lastRefresh = millis();
+  }
+}
+
 uint16_t normalizeAlarmTrack(int track){
   for(uint8_t i = 0; i < JQ_ALARM_TRACK_COUNT; i++){
     if(track == JQ_ALARM_TRACKS[i]){
@@ -176,7 +208,7 @@ void setSimulatedFireAlarm(bool enabled, bool forceNotify){
     requestFireEmailAlert(forceNotify);
   }
   updateWarningLight();
-  drawCurrentPage();
+  sensorStateChanged = true;
 }
 
 void startAlarmEdit(){
@@ -205,6 +237,7 @@ void finishAlarmEdit(){
   alarmEditField = 0;
   alarmEnabled = true;
   alarmRinging = false;
+  lastAlarmVoiceMillis = 0;
   skipTodayIfAlarmMatchesNow();
   updateWarningLight();
   setAlarmPrefs();
@@ -252,6 +285,7 @@ void stopAlarmRinging(){
     return;
   }
   alarmRinging = false;
+  lastAlarmVoiceMillis = 0;
   jqStop();
   alarmPagePending = false;
   modalShowed = false;
@@ -266,7 +300,7 @@ void stopAlarmRinging(){
 }
 
 void stopEventRinging(){
-  if(!eventRinging){
+  if(!eventRinging && !eventPagePending){
     return;
   }
   eventRinging = false;
@@ -275,6 +309,8 @@ void stopEventRinging(){
   jqStop();
   updateWarningLight();
   sensorStateChanged = true;
+  modalShowed = false;
+  alarmEditField = 0;
   drawCurrentPage();
   lastRefresh = millis();
 }
@@ -807,15 +843,31 @@ void checkEventReminder(){
     if(!eventEnabledList[i] || eventTextList[i].length() == 0){
       continue;
     }
-    int reminderKey = todayKey * EVENT_SLOT_COUNT + i;
-    if(daysUntilEvent(i) == 1 && lastEventDay != reminderKey){
+    int subtitleKey = todayKey * EVENT_SLOT_COUNT + i;
+    if(daysUntilEvent(i) == 1 && lastEventSubtitleDay != subtitleKey){
       activeEventIndex = i;
       eventRinging = false;
       eventPagePending = false;
-      lastEventDay = reminderKey;
+      lastEventSubtitleDay = subtitleKey;
       sensorStateChanged = true;
       syncEventSummary();
       logInfoln("Event reminder subtitle shown");
+      return;
+    }
+    int eventKey = todayKey * EVENT_SLOT_COUNT + i;
+    if(daysUntilEvent(i) == 0 &&
+       info.tm_hour == eventHourList[i] &&
+       info.tm_min == eventMinuteList[i] &&
+       lastEventDay != eventKey){
+      activeEventIndex = i;
+      eventRinging = true;
+      eventPagePending = true;
+      lastEventDay = eventKey;
+      modalShowed = false;
+      alarmEditField = 0;
+      sensorStateChanged = true;
+      syncEventSummary();
+      logInfoln("Event reminder full screen");
       return;
     }
   }
@@ -827,13 +879,21 @@ void playAlarmSound(){
     return;
   }
   jqPlayTrack(normalizeAlarmTrack(alarmTrack));
+  lastAlarmVoiceMillis = millis();
 }
 
 void checkAlarm(){
   if(!alarmEnabled || !clockReady()){
     if(alarmRinging){
       alarmRinging = false;
+      lastAlarmVoiceMillis = 0;
       updateWarningLight();
+    }
+    return;
+  }
+  if(alarmRinging){
+    if(voice && (lastAlarmVoiceMillis == 0 || millis() - lastAlarmVoiceMillis >= ALARM_VOICE_INTERVAL_MS)){
+      playAlarmSound();
     }
     return;
   }
@@ -1143,20 +1203,23 @@ void btn1click(){
   }
 }
 void btn2click(){
+  if(fireAlertActive() || theftAlertActive()){
+    Dida();
+    lastUserAction = millis();
+    stopAllAlerts();
+    buttonEnable = true;
+    return;
+  }
   if(!buttonEnable){
     return;
   }
   Dida();
   lastUserAction = millis();
-  if(fireAlertActive() || theftAlertActive()){
-    acknowledgeActiveWarning();
-    return;
-  }
   if(alarmRinging){
     stopAlarmRinging();
     return;
   }
-  if(eventRinging){
+  if(eventRinging || eventPagePending){
     stopEventRinging();
     return;
   }
@@ -1219,7 +1282,9 @@ void btn2click(){
           break;
         case OPTION_SMOKE_TEST:
           setSimulatedFireAlarm(!simulatedFireAlarm);
-          drawConfigOption(configChoosedIndex);
+          if(!fireAlertActive()){
+            drawConfigOption(configChoosedIndex);
+          }
           break;
         case OPTION_ALARM:
           alarmEnabled = !alarmEnabled;
@@ -1324,17 +1389,20 @@ void btn1LongClick(){
   buttonEnable = true;
 }
 void btn2LongClick(){
-  Dida();
-  lastUserAction = millis();
   if(fireAlertActive() || theftAlertActive()){
-    acknowledgeActiveWarning();
+    Dida();
+    lastUserAction = millis();
+    stopAllAlerts();
+    buttonEnable = true;
     return;
   }
+  Dida();
+  lastUserAction = millis();
   if(alarmRinging){
     stopAlarmRinging();
     return;
   }
-  if(eventRinging){
+  if(eventRinging || eventPagePending){
     stopEventRinging();
     return;
   }

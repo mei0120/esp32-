@@ -3,6 +3,7 @@
 #include <WebServer.h>
 #include <ArduinoJson.h>
 #include <NTPClient.h>
+#include <time.h>
 #include "ArduinoZlib.h"
 #include "PreferencesUtil.h"
 #include "tftUtil.h"
@@ -221,6 +222,54 @@ static int parseFirstNumber(const String &text){
   return -1;
 }
 
+static int timeEndIndexInText(const String &text){
+  int colon = text.indexOf(':');
+  if(colon < 1){
+    return -1;
+  }
+  int end = colon + 1;
+  while(end < (int)text.length() && isDigit(text[end])){
+    end++;
+  }
+  return end;
+}
+
+static bool dateFromOffsetDays(int offsetDays, int &year, int &month, int &day){
+  if(!clockReady()){
+    return false;
+  }
+  time_t raw = (time_t)currentEpoch() + (time_t)offsetDays * 86400;
+  tm *info = gmtime(&raw);
+  if(info == nullptr){
+    return false;
+  }
+  year = info->tm_year + 1900;
+  month = info->tm_mon + 1;
+  day = info->tm_mday;
+  return true;
+}
+
+static void saveCommandEvent(int year, int month, int day, int hour, int minute, String text){
+  text.trim();
+  if(text.length() == 0){
+    text = "Event";
+  }
+  if(text.length() > 60){
+    text = text.substring(0, 60);
+  }
+  int slot = 0;
+  eventEnabledList[slot] = true;
+  eventYearList[slot] = year;
+  eventMonthList[slot] = month;
+  eventDayList[slot] = day;
+  eventHourList[slot] = hour;
+  eventMinuteList[slot] = minute;
+  eventTextList[slot] = text;
+  setEventPrefs();
+  sensorStateChanged = true;
+  lastCommandResult = "Event 1 saved: " + eventDateText(slot) + " " + eventTextList[slot];
+}
+
 static String eventInputDate(int index){
   if(index < 0 || index >= EVENT_SLOT_COUNT || eventYearList[index] <= 0){
     return "";
@@ -270,21 +319,21 @@ void handleControl(){
   String eventsHtml = "";
   for(int i = 0; i < EVENT_SLOT_COUNT; i++){
     eventsHtml += "<form action='/setevent' method='post'><input type='hidden' name='eventSlot' value='" + String(i) + "'>";
-    eventsHtml += "<h3>Event " + String(i + 1) + "</h3>";
-    eventsHtml += "<label class='check'><input type='checkbox' name='eventEnabled'" + checkedAttr(eventEnabledList[i]) + ">Enable this event</label>";
-    eventsHtml += "<label>Event date</label><input type='date' name='eventDate' value='" + eventInputDate(i) + "'>";
-    eventsHtml += "<label>Event time</label><input type='time' name='eventTime' value='" + eventInputTime(i) + "'>";
-    eventsHtml += "<label>Event text</label><textarea name='eventText' maxlength='60'>" + htmlEscape(eventTextList[i]) + "</textarea>";
-    eventsHtml += "<button>Save Event " + String(i + 1) + "</button></form>";
+    eventsHtml += "<h3><span class='dot'></span>Plan " + String(i + 1) + "</h3>";
+    eventsHtml += "<label class='check'><input type='checkbox' name='eventEnabled'" + checkedAttr(eventEnabledList[i]) + ">Show this plan</label>";
+    eventsHtml += "<label>Date</label><input type='date' name='eventDate' value='" + eventInputDate(i) + "'>";
+    eventsHtml += "<label>Time</label><input type='time' name='eventTime' value='" + eventInputTime(i) + "'>";
+    eventsHtml += "<label>Note</label><textarea name='eventText' maxlength='60'>" + htmlEscape(eventTextList[i]) + "</textarea>";
+    eventsHtml += "<button>Save Plan " + String(i + 1) + "</button></form>";
   }
 
   String page = "<!DOCTYPE html><html lang='zh'><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>";
   page += "<link href='https://cdn.jsdelivr.net/npm/qweather-icons@1.8.0/font/qweather-icons.css' rel='stylesheet'>";
-  page += "<title>Smart Calendar</title><style>:root{--bg:#f5f7fb;--panel:#fff;--ink:#111827;--muted:#64748b;--line:#d8dee8;--blue:#2563eb;--red:#dc2626;--green:#16803c;--amber:#d97706}*{box-sizing:border-box}body{font-family:Arial,'Microsoft YaHei',sans-serif;margin:0;background:var(--bg);color:var(--ink)}.wrap{max-width:760px;margin:0 auto;padding:14px 14px 92px}.hero{padding:18px 2px 10px;display:flex;align-items:flex-end;justify-content:space-between;gap:10px}.brand{min-width:0}h1{font-size:27px;margin:0 0 5px;letter-spacing:0}h2{font-size:17px;margin:0 0 12px}.chips{display:flex;gap:7px;flex-wrap:wrap}.chip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 9px;font-size:12px;color:var(--muted)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:15px;margin:12px 0;box-shadow:0 3px 14px rgba(15,23,42,.06)}.card.accent{border-left:5px solid var(--blue)}.card.warn{border-left:5px solid var(--amber)}.stat{font-size:14px;line-height:1.75}.value{font-size:25px;font-weight:800}.bad{color:var(--red);font-weight:700}.ok{color:var(--green);font-weight:700}label{display:block;margin:10px 0 6px;color:#334155;font-weight:700}input,textarea,select,button{width:100%;font-size:16px;padding:11px;border:1px solid #cbd5e1;border-radius:8px;background:#fff}textarea{min-height:74px}button{margin-top:14px;background:var(--blue);color:white;border:0;font-weight:800}.danger{background:var(--red)}.gray{background:#64748b}.check{display:flex;gap:8px;align-items:center}.check input{width:auto}.muted{color:var(--muted);font-size:14px;line-height:1.5}.result{background:#eef6ff;border-left:4px solid var(--blue);padding:10px;margin-top:10px;border-radius:6px}.row{display:flex;gap:10px}.row form{flex:1}.bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);border-top:1px solid var(--line);padding:10px 14px;z-index:8}.bottomInner{max-width:760px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:10px}.bottom button{margin:0}.alertFull{display:none;position:fixed;inset:0;z-index:20;background:var(--red);color:#fff;align-items:center;justify-content:center;padding:20px}.alertBox{max-width:360px;text-align:center}.alertIcon{width:86px;height:86px;border:5px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:56px;font-weight:900;margin:0 auto 18px}.alertBox h1{font-size:34px;margin-bottom:10px}.alertBox p{font-size:17px;line-height:1.5}.alertBox button{background:#fff;color:var(--red);font-weight:900}@media(max-width:560px){.grid{grid-template-columns:1fr}.hero{display:block}.row{display:block}.bottomInner{grid-template-columns:1fr 1fr}}</style></head><body><div id='alert' class='alertFull'><div class='alertBox'><div class='alertIcon'>!</div><h1>FIRE ALARM</h1><p>Smoke or fire detected. Check the device now.</p><form action='/smoketest' method='post'><input type='hidden' name='mode' value='off'><button>Clear Demo Alarm</button></form></div></div><div class='wrap'>";
-  page += "<style>body{background:linear-gradient(180deg,#eaf4ff 0,#f7f8fb 210px);}.wrap{padding-top:10px}.hero{background:linear-gradient(135deg,#0f766e,#2563eb);color:white;border-radius:8px;padding:18px 16px;margin:4px 0 12px;box-shadow:0 10px 26px rgba(37,99,235,.22)}.hero .muted{color:rgba(255,255,255,.82)}.hero h1{font-size:28px}.chip{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.32);color:white}.dash{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0 4px}.tile{background:white;border:1px solid var(--line);border-radius:8px;padding:10px 8px;text-align:center;box-shadow:0 3px 12px rgba(15,23,42,.05)}.tile b{display:block;font-size:18px;margin-top:4px}.wxTop{display:flex;align-items:center;justify-content:space-between;gap:12px}.wxIcon{font-size:52px;color:#f59e0b}.card{box-shadow:0 6px 20px rgba(15,23,42,.07)}.card.accent{border-left:0}.card.warn{border-left:0;border-top:4px solid var(--amber)}button{min-height:44px}@media(max-width:560px){.dash{grid-template-columns:repeat(2,1fr)}} </style>";
-  page += "<div class='hero'><div class='brand'><h1>Smart Calendar</h1><div class='muted'>Time " + currentFormattedTime() + " · IP " + WiFi.localIP().toString() + "</div></div><div class='chips'><span class='chip'>" + String(wifiConnected() ? "WiFi online" : "WiFi offline") + "</span><span class='chip'>" + String(alarmEnabled ? "Alarm on" : "Alarm off") + "</span><span class='chip'>" + String(antiTheftMode ? "Security on" : "Security off") + "</span></div></div>";
-  page += "<div class='dash'><div class='tile'>Indoor<b>" + temperature + "C</b></div><div class='tile'>Humidity<b>" + humidity + "%</b></div><div class='tile'>AQI<b>" + String(weather.air) + "</b></div><div class='tile'>Light<b>" + String((int)lightLux) + "</b></div></div>";
-  page += "<div class='grid'><div class='card accent stat'><h2>Indoor</h2><div class='value'>" + temperature + " C</div><div>Humidity " + humidity + "%</div><div>Light " + String((int)lightLux) + " lux</div><div class='" + String(fireAlarm ? "bad" : "ok") + "'>Smoke " + String(fireAlarm ? "ALARM" : "normal") + "</div><div class='" + String(infraredDetected ? "bad" : "ok") + "'>IR " + String(infraredDetected ? "detected" : "clear") + "</div></div>";
+  page += "<title>Smart Calendar</title><style>:root{--bg:#fff7fb;--panel:#fff;--ink:#213047;--muted:#738096;--line:#eadfea;--blue:#6b8cff;--mint:#35b6a3;--green:#42a66b;--red:#e94f64;--amber:#eaa33a;--pink:#ff8fb3;--soft:#fffafd}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:linear-gradient(180deg,#fff1f7 0,#eef9ff 250px,#fffdf8 100%);color:var(--ink);font-family:Arial,'Microsoft YaHei',sans-serif}.wrap{max-width:780px;margin:0 auto;padding:12px 14px 92px}.topbar{display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px;color:#667085;font-size:13px}.hero{background:linear-gradient(135deg,#7bd9c6,#89a8ff 58%,#ff9fbd);color:white;border-radius:8px;padding:18px 16px;margin-bottom:12px;box-shadow:0 14px 30px rgba(130,150,255,.22)}.heroHead{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.hero h1{font-size:29px;margin:0 0 5px;letter-spacing:0}.hero .muted{color:rgba(255,255,255,.88)}.heroTime{font-size:34px;font-weight:900;line-height:1}.chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}.chip{border:1px solid rgba(255,255,255,.40);background:rgba(255,255,255,.22);border-radius:999px;padding:6px 9px;font-size:12px;color:white}.quick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0 12px}.tile{background:white;border:1px solid var(--line);border-radius:8px;padding:11px 8px;box-shadow:0 6px 16px rgba(102,112,133,.07);border-top:4px solid var(--blue)}.tile:nth-child(2){border-top-color:var(--mint)}.tile:nth-child(3){border-top-color:var(--amber)}.tile:nth-child(4){border-top-color:var(--pink)}.tile span{display:block;color:var(--muted);font-size:12px}.tile b{display:block;font-size:20px;margin-top:4px}.mini{float:right;background:#f8f1ff;color:#7c3aed;border-radius:999px;padding:2px 6px;font-size:11px;font-weight:900}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.card{background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:8px;padding:15px;margin:12px 0;box-shadow:0 8px 20px rgba(102,112,133,.07)}.card h2{font-size:17px;margin:0 0 12px}.sectionTitle{display:flex;align-items:center;justify-content:space-between;gap:8px}.badge{font-size:12px;border-radius:999px;padding:5px 8px;background:#fff0f6;color:#be4166}.value{font-size:28px;font-weight:900}.stat{font-size:14px;line-height:1.75}.bad{color:var(--red);font-weight:800}.ok{color:var(--green);font-weight:800}.wxTop{display:flex;align-items:center;justify-content:space-between;gap:12px}.wxIcon{font-size:58px;color:#f6a72f}.forecast{margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;color:#536175}.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.actionForm{margin:0}.actionBtn{margin:0;min-height:46px}.danger{background:var(--red)}.gray{background:#7a88a0}.green{background:var(--mint)}label{display:block;margin:10px 0 6px;color:#42526b;font-weight:800;font-size:14px}input,textarea,select,button{width:100%;font-size:16px;padding:11px;border:1px solid #d8dce8;border-radius:8px;background:#fff}textarea{min-height:74px}button{margin-top:14px;background:var(--blue);color:white;border:0;font-weight:900;box-shadow:0 5px 12px rgba(107,140,255,.18)}.check{display:flex;gap:8px;align-items:center}.check input{width:auto}.muted{color:var(--muted);font-size:14px;line-height:1.5}.result{background:#f3f8ff;border-left:4px solid var(--blue);padding:10px;margin-top:10px;border-radius:6px}.row{display:flex;gap:10px}.row form{flex:1}.eventGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.eventBox{border:1px solid var(--line);background:var(--soft);border-radius:8px;padding:12px}.eventBox h3{margin:0 0 8px;font-size:15px}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--pink);margin-right:6px}.bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(255,255,255,.96);border-top:1px solid var(--line);padding:10px 14px;z-index:8}.bottomInner{max-width:780px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:10px}.bottom button{margin:0}.alertFull{display:none;position:fixed;inset:0;z-index:20;background:var(--red);color:#fff;align-items:center;justify-content:center;padding:20px}.alertBox{max-width:360px;text-align:center}.alertIcon{width:86px;height:86px;border:5px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:56px;font-weight:900;margin:0 auto 18px}.alertBox h1{font-size:34px;margin:0 0 10px}.alertBox p{font-size:17px;line-height:1.5}.alertBox button{background:#fff;color:var(--red);font-weight:900}@media(max-width:560px){.wrap{padding-left:12px;padding-right:12px}.heroHead{display:block}.heroTime{font-size:31px;margin-top:10px}.quick{grid-template-columns:repeat(2,1fr)}.grid,.eventGrid{grid-template-columns:1fr}.actions{grid-template-columns:1fr 1fr}.row{display:block}.bottomInner{grid-template-columns:1fr 1fr}}</style></head><body><div id='alert' class='alertFull'><div class='alertBox'><div class='alertIcon'>!</div><h1>FIRE ALARM</h1><p>Smoke or fire detected. Check the device now.</p><form action='/smoketest' method='post'><input type='hidden' name='mode' value='off'><button>Clear Demo Alarm</button></form></div></div><div class='wrap'>";
+  page += "<div class='topbar'><span>Live little panel</span><span>" + WiFi.localIP().toString() + "</span></div>";
+  page += "<div class='hero'><div class='heroHead'><div><h1>Music Calendar</h1><div class='muted'>A tiny clock for weather, music and reminders</div></div><div class='heroTime'>" + currentFormattedTime().substring(0, 5) + "</div></div><div class='chips'><span class='chip'>" + String(wifiConnected() ? "WiFi ready" : "WiFi off") + "</span><span class='chip'>" + String(alarmEnabled ? "Wake-up on" : "Wake-up off") + "</span><span class='chip'>" + String(antiTheftMode ? "Guard on" : "Guard off") + "</span><span class='chip'>" + String(fireEmailEnabled() ? "Mail ready" : "Mail off") + "</span></div></div>";
+  page += "<div class='quick'><div class='tile'><span><span class='mini'>T</span>Room temp</span><b>" + temperature + "C</b></div><div class='tile'><span><span class='mini'>H</span>Humidity</span><b>" + humidity + "%</b></div><div class='tile'><span><span class='mini'>A</span>Air</span><b>" + String(weather.air) + "</b></div><div class='tile'><span><span class='mini'>L</span>Light</span><b>" + String((int)lightLux) + "</b></div></div>";
+  page += "<div class='grid'><div class='card stat'><div class='sectionTitle'><h2>Cozy Room</h2><span class='badge'>" + String(fireAlarm || infraredDetected ? "Check me" : "All good") + "</span></div><div class='value'>" + temperature + " C</div><div>Humidity " + humidity + "%</div><div>Light " + String((int)lightLux) + " lux</div><div class='" + String(fireAlarm ? "bad" : "ok") + "'>Smoke " + String(fireAlarm ? "ALARM" : "normal") + "</div><div class='" + String(infraredDetected ? "bad" : "ok") + "'>Guard " + String(infraredDetected ? "detected" : "quiet") + "</div></div>";
   String forecastHtml = "";
   if(weather.forecastReady){
     for(int i = 0; i < weather.forecastCount; i++){
@@ -293,14 +342,14 @@ void handleControl(){
   }else{
     forecastHtml = "<div>Forecast waiting</div>";
   }
-  page += "<div class='card accent stat'><div class='wxTop'><div><h2>Weather</h2><div class='value'>" + htmlEscape(city) + "</div><div>Now " + htmlEscape(weather.text) + " · " + String(weather.temp) + " C</div></div><i class='qi-" + String(weather.icon) + " wxIcon'></i></div><div>AQI " + String(weather.air) + " · PM2.5 " + htmlEscape(weather.pm2p5) + "</div><div>Wind " + htmlEscape(weather.win) + "</div>" + forecastHtml + "<div>Network " + String(wifiConnected() ? "online" : "offline") + "</div></div></div>";
-  page += "<div class='card warn'><h2>Alarm</h2><form action='/setalarm' method='post'><label class='check'><input type='checkbox' name='alarmEnabled'" + checkedAttr(alarmEnabled) + ">Enable alarm</label><label>Alarm time</label><input type='time' name='alarmTime' value='" + alarmHH + ":" + alarmMM + "' required><label>Alarm music</label><select name='alarmTrack'>" + alarmOptions + "</select><button>Save alarm</button></form><div class='row'><form action='/stopalarm' method='post'><button class='danger'>Stop alarm</button></form><form action='/playtrack' method='post'><input type='hidden' name='track' value='" + String(alarmTrack) + "'><button class='gray'>Test music</button></form></div></div>";
-  page += "<div class='card'><h2>Command</h2><form action='/command' method='post'><label>Natural command</label><input name='cmd' maxlength='80' placeholder='event 2026-07-12 14:30 meeting'><button>Run command</button></form><div class='result'>" + htmlEscape(lastCommandResult) + "</div><p class='muted'>Examples: alarm on, alarm off, set alarm 07:30, security on, play music 4, smoke test, clear smoke, event 2026-07-12 14:30 meeting, refresh weather, stop alarm.</p></div>";
-  page += "<div class='card'><h2>Security and Sound</h2><form action='/setsecurity' method='post'><label class='check'><input type='checkbox' name='antiTheftMode'" + checkedAttr(antiTheftMode) + ">Enable anti-theft mode</label><button>Save security</button></form><form action='/setsound' method='post'><label class='check'><input type='checkbox' name='voice'" + checkedAttr(voice) + ">Enable JQ8900 sound</label><button>Save sound</button></form></div>";
-  page += "<div class='card warn'><h2>Smoke Test</h2><div class='" + String(simulatedFireAlarm ? "bad" : "ok") + "'>Simulated smoke " + String(simulatedFireAlarm ? "ON" : "OFF") + "</div><div class='row'><form action='/smoketest' method='post'><input type='hidden' name='mode' value='on'><button class='danger'>Simulate smoke/fire</button></form><form action='/smoketest' method='post'><input type='hidden' name='mode' value='off'><button class='gray'>Clear test</button></form></div><p class='muted'>For defense demo: triggers screen alarm, red light, track 3, and email without real smoke.</p></div>";
-  page += "<div class='card'><h2>Event Reminder</h2>" + eventsHtml + "<p class='muted'>The screen shows a subtitle one day before the event. Events do not play music. Current subtitle: " + htmlEscape(eventReminderText()) + "</p></div>";
-  page += "<div class='card'><h2>Clock and Data</h2><form action='/setclock' method='post'><label>Date</label><input type='date' name='date' required><label>Time</label><input type='time' name='time' step='1' required><button>Save time</button></form><div class='row'><form action='/refreshweather' method='post'><button class='gray'>Refresh weather</button></form><form action='/playtrack' method='post'><label>Play track</label><select name='track'>" + voiceOptions + "</select><button class='gray'>Play</button></form></div><p class='muted'>Tracks: 1 Haiyu Ni, 2 theft, 3 smoke/fire, 4 Tianfu, 5 Ai.</p><p class='muted'><a href='/status'>JSON status</a></p></div>";
-  page += "<div class='card'><h2>Phone Alert</h2><div>Email alert " + String(fireEmailEnabled() ? "enabled" : "disabled") + "</div><div>Status " + htmlEscape(fireEmailStatusText()) + "</div><p class='muted'>Smoke/fire uses local sound/light first, then sends email when WiFi is online.</p></div>";
+  page += "<div class='card stat'><div class='wxTop'><div><div class='sectionTitle'><h2>Sky Today</h2><span class='badge'>" + String(wifiConnected() ? "Fresh" : "Offline") + "</span></div><div class='value'>" + htmlEscape(city) + "</div><div>" + htmlEscape(weather.text) + " / " + String(weather.temp) + " C</div></div><i class='qi-" + String(weather.icon) + " wxIcon'></i></div><div>AQI " + String(weather.air) + " / PM2.5 " + htmlEscape(weather.pm2p5) + "</div><div>Wind " + htmlEscape(weather.win) + "</div><div class='forecast'>" + forecastHtml + "</div></div></div>";
+  page += "<div class='card'><div class='sectionTitle'><h2>Little Controls</h2><span class='badge'>Show time</span></div><div class='actions'><form class='actionForm' action='/smoketest' method='post'><input type='hidden' name='mode' value='on'><button class='actionBtn danger'>Fire Demo</button></form><form class='actionForm' action='/stopalarm' method='post'><button class='actionBtn gray'>Stop Sound</button></form><form class='actionForm' action='/refreshweather' method='post'><button class='actionBtn green'>New Sky</button></form></div></div>";
+  page += "<div class='grid'><div class='card'><h2>Wake-up Music</h2><form action='/setalarm' method='post'><label class='check'><input type='checkbox' name='alarmEnabled'" + checkedAttr(alarmEnabled) + ">Use this alarm</label><label>Time</label><input type='time' name='alarmTime' value='" + alarmHH + ":" + alarmMM + "' required><label>Song</label><select name='alarmTrack'>" + alarmOptions + "</select><button>Save wake-up</button></form><div class='row'><form action='/stopalarm' method='post'><button class='danger'>Stop</button></form><form action='/playtrack' method='post'><input type='hidden' name='track' value='" + String(alarmTrack) + "'><button class='gray'>Try song</button></form></div></div>";
+  page += "<div class='card'><h2>Guard and Voice</h2><form action='/setsecurity' method='post'><label class='check'><input type='checkbox' name='antiTheftMode'" + checkedAttr(antiTheftMode) + ">Guard mode</label><button>Save guard</button></form><form action='/setsound' method='post'><label class='check'><input type='checkbox' name='voice'" + checkedAttr(voice) + ">Voice module</label><button>Save voice</button></form></div></div>";
+  page += "<div class='card'><div class='sectionTitle'><h2>Say It Simply</h2><span class='badge'>Text command</span></div><form action='/command' method='post'><label>Type a command</label><input name='cmd' maxlength='80' placeholder='event tomorrow 8:00 report'><button>Do it</button></form><div class='result'>" + htmlEscape(lastCommandResult) + "</div><p class='muted'>Try: alarm 7:30, music 1, guard on, fire demo, stop all, event tomorrow 8:00 report.</p></div>";
+  page += "<div class='card'><div class='sectionTitle'><h2>Tiny Plans</h2><span class='badge'>3 notes</span></div><div class='eventGrid'>" + eventsHtml + "</div><p class='muted'>One day before a plan, the screen shows a small subtitle. Today plans pop up full screen. Current subtitle: " + htmlEscape(eventReminderText()) + "</p></div>";
+  page += "<div class='grid'><div class='card'><h2>Time Tune</h2><form action='/setclock' method='post'><label>Date</label><input type='date' name='date' required><label>Time</label><input type='time' name='time' step='1' required><button>Set clock</button></form></div>";
+  page += "<div class='card'><h2>Music Box</h2><form action='/playtrack' method='post'><label>Choose track</label><select name='track'>" + voiceOptions + "</select><button>Play track</button></form><p class='muted'>Tracks: 1 Haiyu Ni, 2 guard, 3 smoke/fire, 4 Tianfu, 5 Ai.</p><div>Mail alert " + String(fireEmailEnabled() ? "ready" : "off") + "</div><div>Status " + htmlEscape(fireEmailStatusText()) + "</div><p class='muted'><a href='/status'>JSON status</a></p></div></div>";
   page += "<div class='bottom'><div class='bottomInner'><form action='/smoketest' method='post'><input type='hidden' name='mode' value='on'><button class='danger'>Fire Demo</button></form><form action='/stopalarm' method='post'><button class='gray'>Stop Alarm</button></form></div></div>";
   page += "<script>let lastFire=false;async function poll(){try{const r=await fetch('/status',{cache:'no-store'});const s=await r.json();const a=document.getElementById('alert');const active=s.fireAlertActive||s.theftAlertActive;if(active){a.style.display='flex';a.querySelector('h1').textContent=s.fireAlertActive?'FIRE ALARM':'SECURITY ALARM';a.querySelector('p').textContent=s.fireAlertActive?'Smoke or fire detected. Check the device now.':'IR detected in anti-theft mode.';if(!lastFire){if(navigator.vibrate)navigator.vibrate([300,150,300,150,700]);if('Notification'in window){if(Notification.permission==='granted')new Notification('Smart Calendar alarm',{body:s.fireAlertActive?'Smoke/fire alarm detected':'Security alarm detected'});else if(Notification.permission!=='denied')Notification.requestPermission();}}}else{a.style.display='none';}lastFire=active;}catch(e){}}setInterval(poll,1200);poll();</script>";
   page += "</div></body></html>";
@@ -328,7 +377,7 @@ void handleSetClock(){
     server.send(400, "text/plain; charset=UTF-8", "Invalid time");
     return;
   }
-  draw2LineText("Time updated", currentFormattedTime());
+  sensorStateChanged = true;
   server.sendHeader("Location", "/control");
   server.send(303);
 }
@@ -372,7 +421,7 @@ void handleSetSound(){
 }
 
 void handleStopAlarm(){
-  stopAlarmRinging();
+  stopAllAlerts();
   server.sendHeader("Location", "/control");
   server.send(303);
 }
@@ -428,13 +477,13 @@ void handleCommand(){
     }else{
       lastCommandResult = "Alarm command needs time, example: set alarm 07:30";
     }
-  }else if(lower == "security on" || lower == "anti theft on" || lower == "antitheft on"){
+  }else if(lower == "security on" || lower == "anti theft on" || lower == "antitheft on" || lower == "guard on"){
     antiTheftMode = true;
     sensorStateChanged = true;
     updateWarningLight();
     setAlarmPrefs();
     lastCommandResult = "Security enabled";
-  }else if(lower == "security off" || lower == "anti theft off" || lower == "antitheft off"){
+  }else if(lower == "security off" || lower == "anti theft off" || lower == "antitheft off" || lower == "guard off"){
     antiTheftMode = false;
     sensorStateChanged = true;
     updateWarningLight();
@@ -451,7 +500,7 @@ void handleCommand(){
     updateWarningLight();
     setVoice();
     lastCommandResult = "Sound disabled";
-  }else if(lower.startsWith("play music") || lower.startsWith("play track")){
+  }else if(lower.startsWith("play music") || lower.startsWith("play track") || lower.startsWith("music ") || lower.startsWith("track ")){
     int parsedTrack = parseFirstNumber(lower);
     if(parsedTrack < 1 || parsedTrack > 5){
       lastCommandResult = "Play command needs track 1-5, example: play music 2";
@@ -463,32 +512,42 @@ void handleCommand(){
   }else if(lower == "refresh weather" || lower == "update weather"){
     updateWeather = true;
     lastCommandResult = "Weather refresh started";
-  }else if(lower == "smoke test" || lower == "fire test" || lower == "simulate smoke" || lower == "simulate fire"){
+  }else if(lower == "smoke test" || lower == "fire test" || lower == "fire demo" || lower == "simulate smoke" || lower == "simulate fire"){
     setSimulatedFireAlarm(true, true);
     lastCommandResult = "Simulated smoke/fire alarm started";
   }else if(lower == "clear smoke" || lower == "clear fire" || lower == "stop smoke test" || lower == "clear smoke test"){
     setSimulatedFireAlarm(false);
     lastCommandResult = "Simulated smoke/fire alarm cleared";
-  }else if(lower == "stop alarm" || lower == "stop"){
-    stopAlarmRinging();
-    jqStop();
-    lastCommandResult = "Alarm stopped";
+  }else if(lower == "stop alarm" || lower == "stop" || lower == "stop all" || lower == "clear alarm" || lower == "clear alert"){
+    stopAllAlerts();
+    lastCommandResult = "Alerts stopped";
+  }else if(lower.startsWith("event tomorrow ") || lower.startsWith("event today ")){
+    int y = 0;
+    int mo = 0;
+    int d = 0;
+    int offsetDays = lower.startsWith("event tomorrow ") ? 1 : 0;
+    if(!dateFromOffsetDays(offsetDays, y, mo, d)){
+      lastCommandResult = "Clock not ready for today/tomorrow event";
+    }else{
+      int eventH = 8;
+      int eventM = 0;
+      if(!parseTimeInText(lower, eventH, eventM)){
+        lastCommandResult = "Event command needs time, example: event tomorrow 8:00 report";
+      }else{
+        int textStart = timeEndIndexInText(lower);
+        String eventNote = textStart >= 0 ? cmd.substring(textStart) : "";
+        saveCommandEvent(y, mo, d, eventH, eventM, eventNote);
+      }
+    }
   }else if(lower.startsWith("event ")){
     int y = 0;
     int mo = 0;
     int d = 0;
     int dateStart = -1;
     if(parseDateInText(lower, y, mo, d, dateStart)){
-      int slot = 0;
       int eventH = 8;
       int eventM = 0;
       parseTimeInText(lower, eventH, eventM);
-      eventEnabledList[slot] = true;
-      eventYearList[slot] = y;
-      eventMonthList[slot] = mo;
-      eventDayList[slot] = d;
-      eventHourList[slot] = eventH;
-      eventMinuteList[slot] = eventM;
       int textStart = dateStart + 10;
       while(textStart < (int)cmd.length() && (cmd[textStart] == ' ' || cmd[textStart] == '-' || cmd[textStart] == '/')){
         textStart++;
@@ -499,17 +558,7 @@ void handleCommand(){
       while(textStart < (int)cmd.length() && cmd[textStart] == ' '){
         textStart++;
       }
-      eventTextList[slot] = cmd.substring(textStart);
-      eventTextList[slot].trim();
-      if(eventTextList[slot].length() == 0){
-        eventTextList[slot] = "Event";
-      }
-      if(eventTextList[slot].length() > 60){
-        eventTextList[slot] = eventTextList[slot].substring(0, 60);
-      }
-      setEventPrefs();
-      sensorStateChanged = true;
-      lastCommandResult = "Event 1 saved: " + eventTextList[slot];
+      saveCommandEvent(y, mo, d, eventH, eventM, cmd.substring(textStart));
     }else{
       lastCommandResult = "Event command needs date, example: event 2026-07-10 submit report";
     }
@@ -577,9 +626,7 @@ void handleSetEvent(){
     eventTextList[slot] = "Event";
   }
   setEventPrefs();
-  if(eventEnabledList[slot] && eventTextList[slot].length() > 0){
-    draw2LineText("Event saved", "Check Reminder");
-  }
+  sensorStateChanged = true;
   server.sendHeader("Location", "/control");
   server.send(303);
 }
@@ -621,6 +668,7 @@ void handleStatus(){
     json += "{";
     json += "\"enabled\":" + String(eventEnabledList[i] ? "true" : "false") + ",";
     json += "\"date\":\"" + jsonEscape(eventDateText(i)) + "\",";
+    json += "\"time\":\"" + String(eventHourList[i] < 10 ? "0" : "") + String(eventHourList[i]) + ":" + String(eventMinuteList[i] < 10 ? "0" : "") + String(eventMinuteList[i]) + "\",";
     json += "\"text\":\"" + jsonEscape(eventTextList[i]) + "\"";
     json += "}";
   }

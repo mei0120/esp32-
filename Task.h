@@ -89,6 +89,7 @@ void setSimulatedFireAlarm(bool enabled, bool forceNotify = false);
 bool fireAlertActive();
 bool theftAlertActive();
 void acknowledgeActiveWarning();
+void stopAllAlerts();
 uint16_t normalizeAlarmTrack(int track);
 void stopAlarmRinging();
 void playVoiceTrack(int track);
