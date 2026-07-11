@@ -481,7 +481,7 @@ void drawPage2(){
   clk.unloadFont();
   clk.deleteSprite();
 
-  clk.createSprite(320, 58);
+  clk.createSprite(320, 52);
   clk.fillSprite(backFillColor);
   clk.setTextDatum(CC_DATUM);
   clk.loadFont(page2sensor_16);
@@ -492,17 +492,17 @@ void drawPage2(){
   clk.drawString("SEC " + secondText, 50, 14);
   clk.drawString("IN " + temperature + " C", 150, 14);
   clk.drawString("AQI " + String(weather.air), 260, 14);
-  clk.fillRoundRect(8, 34, 92, 20, 6, statusPanel);
-  clk.fillRoundRect(114, 34, 92, 20, 6, infraredDetected ? pink : statusPanel);
-  clk.fillRoundRect(220, 34, 92, 20, 6, alarmEnabled ? amber : statusPanel);
+  clk.fillRoundRect(8, 30, 92, 18, 6, statusPanel);
+  clk.fillRoundRect(114, 30, 92, 18, 6, infraredDetected ? pink : statusPanel);
+  clk.fillRoundRect(220, 30, 92, 18, 6, alarmEnabled ? amber : statusPanel);
   clk.setTextColor(infraredDetected || alarmEnabled ? TFT_WHITE : penColor);
   clk.setTextColor(penColor);
-  clk.drawString(String("WiFi ") + (mode == ONLINE_MODE ? "ON" : "OFF"), 52, 42);
+  clk.drawString(String("WiFi ") + (mode == ONLINE_MODE ? "ON" : "OFF"), 52, 39);
   clk.setTextColor(infraredDetected ? TFT_WHITE : penColor);
-  clk.drawString(String("IR ") + (infraredDetected ? "ON" : "OFF"), 158, 42);
+  clk.drawString(String("IR ") + (infraredDetected ? "ON" : "OFF"), 158, 39);
   clk.setTextColor(alarmEnabled ? TFT_WHITE : penColor);
-  clk.drawString(String("ALM ") + (alarmEnabled ? "ON" : "OFF"), 264, 42);
-  clk.pushSprite(0, 178);
+  clk.drawString(String("ALM ") + (alarmEnabled ? "ON" : "OFF"), 264, 39);
+  clk.pushSprite(0, 176);
   clk.unloadFont();
   clk.deleteSprite();
 
@@ -649,11 +649,13 @@ void drawPage3(bool refresh){
   clk.fillRoundRect(10, 2, 300, 38, 6, panelColor);
   clk.loadFont(page2sensor_16);
   clk.setTextColor(penColor);
-  if(weather.forecastReady){
-    for(int i = 0; i < weather.forecastCount && i < 2; i++){
+  if(weather.forecastReady && weather.forecastCount > 1){
+    int row = 0;
+    for(int i = 1; i < weather.forecastCount && row < 2; i++){
       String line = weather.forecast[i].date.substring(5) + " " + weather.forecast[i].text + " " +
                     String(weather.forecast[i].tempMin) + "-" + String(weather.forecast[i].tempMax) + "C";
-      clk.drawString(line.substring(0, 30), 22, 9 + i * 17);
+      clk.drawString(line.substring(0, 30), 22, 9 + row * 17);
+      row++;
     }
   }else{
     clk.drawString("Forecast waiting", 22, 14);
@@ -809,11 +811,11 @@ String lunarDateForDate(int y, int m, int d){
   return text;
 }
 
-// 缁樺埗CALENDAR椤甸潰
+// CALENDAR
 void drawCalendar(){
   refreshTFT();
   drawTop();
-  // 璁＄畻骞存湀鏃ユ槦鏈?
+  // 
   unsigned long epochTime = currentEpoch();
   if(epochTime == 0){
     return;
@@ -852,7 +854,7 @@ void drawCalendar(){
   clk.unloadFont();
   clk.pushSprite(0,20);
   clk.deleteSprite();
-  // 缁樺埗鏄熸湡瀛楃涓?
+
   clk.createSprite(320,25);
   clk.setTextDatum(CC_DATUM);
   clk.fillSprite(backFillColor);
@@ -868,13 +870,13 @@ void drawCalendar(){
   clk.pushSprite(0,55);
   clk.unloadFont();
   clk.deleteSprite();
-  // 璁＄畻鏃ユ湡鏁扮粍
+
   totalDays = getTotalDays(showYear, showMonth);
   firstWday = weekdayOfDate(showYear, showMonth, 1);
   lastWday = weekdayOfDate(showYear, showMonth, totalDays);
   lines = (firstWday + totalDays + 6) / 7;
   lineHeight = lines == 6 ? 23 : 28;
-  // 缁樺埗鏃ユ湡 
+
   clk.setTextDatum(CC_DATUM); 
   clk.setTextColor(penColor);
   clk.loadFont(calendar_18);
@@ -916,12 +918,12 @@ void drawCalendar(){
   clk.deleteSprite();
   displayMinute = currentMinute();
 }
-// 缁樺埗CONFIG椤甸潰
+
 void drawConfig(){
   refreshTFT();
-  // 缁樺埗椤堕儴鐘舵€佹爮
+
   drawTop();
-  // 缁樺埗鏍囬
+
   clk.setTextColor(penColor);
   clk.createSprite(320, 30);
   clk.fillSprite(backFillColor);
@@ -935,7 +937,7 @@ void drawConfig(){
     drawConfigOption(i);
   }
 }
-// 缁樺埗绛夊緟鐢ㄦ埛杩炴帴鐨勬枃瀛?
+
 void draw2LineText(String text1, String text2){
   refreshTFT();
   clk.loadFont(settingPage_22);
@@ -949,7 +951,7 @@ void draw2LineText(String text1, String text2){
   clk.deleteSprite();
   clk.unloadFont();
 }
-// 缁樺埗鍔犺浇杞湀椤甸潰
+
 void drawLoading(bool firstTime, String text, int *angle){
   // 绗竴娆¤繘鏉ワ紝鍏堟竻灞忥紝鍐嶇粯鍒舵枃瀛?
   if(firstTime){
@@ -989,7 +991,7 @@ void drawTop(){
   tft.fillRect(0, 0, 320, 20, backFillColor);
   drawAsciiText(mode == ONLINE_MODE ? "WiFi" : "OFF", 8, 2, 2, penColor);
 }
-// 缁樺埗config閫夐」鍗?
+// 绘设置页面
 void drawConfigOption(int index){
   String s;
   switch(index){
@@ -1063,7 +1065,7 @@ void drawConfigOption(int index){
     clk.drawString(simulatedFireAlarm ? "On" : "Off", 300, 12);
   }
   if(index == OPTION_ALARM){
-    clk.drawString((alarmEnabled ? "" : "Off ") + format2(alarmHour) + ":" + format2(alarmMinute), 290, 12);
+    clk.drawString(alarmEnabled ? format2(alarmHour) + ":" + format2(alarmMinute) : "--:--", 274, 12);
   }
   clk.unloadFont();
   clk.pushSprite(0, CONFIG_ROW_TOP + (index) * CONFIG_ROW_HEIGHT);

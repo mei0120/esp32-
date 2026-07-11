@@ -335,8 +335,8 @@ void handleControl(){
   page += "<div class='quick'><div class='tile'><span><span class='mini'>T</span>Room temp</span><b>" + temperature + "C</b></div><div class='tile'><span><span class='mini'>H</span>Humidity</span><b>" + humidity + "%</b></div><div class='tile'><span><span class='mini'>A</span>Air</span><b>" + String(weather.air) + "</b></div><div class='tile'><span><span class='mini'>L</span>Light</span><b>" + String((int)lightLux) + "</b></div></div>";
   page += "<div class='grid'><div class='card stat'><div class='sectionTitle'><h2>Cozy Room</h2><span class='badge'>" + String(fireAlarm || infraredDetected ? "Check me" : "All good") + "</span></div><div class='value'>" + temperature + " C</div><div>Humidity " + humidity + "%</div><div>Light " + String((int)lightLux) + " lux</div><div class='" + String(fireAlarm ? "bad" : "ok") + "'>Smoke " + String(fireAlarm ? "ALARM" : "normal") + "</div><div class='" + String(infraredDetected ? "bad" : "ok") + "'>Guard " + String(infraredDetected ? "detected" : "quiet") + "</div></div>";
   String forecastHtml = "";
-  if(weather.forecastReady){
-    for(int i = 0; i < weather.forecastCount; i++){
+  if(weather.forecastReady && weather.forecastCount > 1){
+    for(int i = 1; i < weather.forecastCount; i++){
       forecastHtml += "<div>" + htmlEscape(weather.forecast[i].date.substring(5)) + " " + htmlEscape(weather.forecast[i].text) + " " + String(weather.forecast[i].tempMin) + "-" + String(weather.forecast[i].tempMax) + " C</div>";
     }
   }else{
